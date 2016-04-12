@@ -1,0 +1,122 @@
+#include <vpi_user.h>
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+#include <stdio.h>
+
+PLI_INT32 gpd(PLI_BYTE8 *user)
+{
+	vpiHandle self;
+	vpiHandle args_iterator;
+
+	self = vpi_handle(vpiSysTfCall, NULL);
+
+	args_iterator = vpi_iterate(vpiArgument, self);
+
+	vpiHandle arg0 = vpi_scan(args_iterator);
+	vpiHandle arg1 = vpi_scan(args_iterator);
+	vpiHandle arg2 = vpi_scan(args_iterator);
+
+	struct t_vpi_value value;
+
+	int in_mem_left, in_mem_right, in_word_left, in_word_right;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiLeftRange, arg0), &value);
+	in_mem_left = value.value.integer;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiRightRange, arg0), &value);
+	in_mem_right = value.value.integer;
+
+	if(in_mem_right < in_mem_left) goto err0;
+
+	vpiHandle word = vpi_handle_by_index(arg0, in_mem_left);
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiLeftRange, word), &value);
+	in_word_left = value.value.integer;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiRightRange, word), &value);
+	in_word_right = value.value.integer;
+
+	if(in_word_right > in_word_left) goto err0;
+
+	unsigned n = in_mem_right - in_mem_left + 1;
+	unsigned *permutation = malloc(sizeof *permutation * n);
+	if(!permutation) goto err1;
+
+	unsigned i;
+	for(i = 0; i < n; ++i) {
+		word = vpi_handle_by_index(arg0, i + in_mem_left);
+		value.format = vpiIntVal;
+		vpi_get_value(word, &value);
+		permutation[i] = value.value.integer;
+	}
+
+	unsigned data_sz;
+	unsigned char *data;
+	if(generate_pattern_data(&data, &data_sz, permutation, n) < 0) {
+		printf("Error creating pattern data\n");
+		goto err2;
+	}
+	if(data_sz > 10 * n + 100) {
+		printf("Pattern too large\n");
+		abort();
+	}
+
+	int out_mem_left, out_mem_right, out_word_left, out_word_right;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiLeftRange, arg1), &value);
+	out_mem_left = value.value.integer;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiRightRange, arg1), &value);
+	out_mem_right = value.value.integer;
+
+	if(out_mem_right < out_mem_left) goto err3;
+
+	word = vpi_handle_by_index(arg1, out_mem_left);
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiLeftRange, word), &value);
+	out_word_left = value.value.integer;
+
+	value.format = vpiIntVal;
+	vpi_get_value(vpi_handle(vpiRightRange, word), &value);
+	out_word_right = value.value.integer;
+
+	if(out_word_right > out_word_left) goto err3;
+
+	for(i = 0; i < out_mem_right - out_mem_left + 1 && i < data_sz; ++i) {
+		word = vpi_handle_by_index(arg1, i + in_mem_left);
+		value.format = vpiIntVal;
+		value.value.integer = data[i];
+		vpi_put_value(word, &value, NULL, vpiNoDelay);
+	}
+
+	value.format = vpiIntVal;
+	value.value.integer = data_sz;
+	vpi_put_value(arg2, &value, NULL, vpiNoDelay);
+
+err3:	free(data);
+err2:	free(permutation);
+err1:	vpi_free_object(args_iterator);
+err0:	return 0;
+}
+
+void register_gpd(void)
+{
+	s_vpi_systf_data s;
+	s.type = vpiSysTask;
+	s.tfname = "$generate_pattern_data";
+	s.calltf = gpd;
+	s.compiletf = NULL;
+	vpi_register_systf(&s);
+}
+
+void (*vlog_startup_routines[])(void) = {
+	register_gpd,
+	NULL
+};

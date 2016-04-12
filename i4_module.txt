@@ -1,0 +1,342 @@
+module switch(
+  clk,
+  reset,
+  pattern_ready,
+  pattern_valid,
+  pattern_data,
+  in_ready,
+  in_valid,
+  out_ready,
+  out_valid,
+  out_t%1$s
+);
+
+input clk;
+input reset;
+output reg pattern_ready;
+input pattern_valid;
+input [7:0] pattern_data;
+output reg in_ready;
+input in_valid;
+input out_ready;
+output reg out_valid;
+output reg [%3$d:0] out_t;
+
+wire [%4$d:0] inputs[0:%5$d];
+%2$s
+
+/* Pipeline so the control word memory can keep up. */
+reg [%4$d:0] inputs_1[0:%5$d];
+reg [%4$d:0] inputs_2[0:%5$d];
+reg valid_1;
+reg valid_2;
+reg valid_3;
+reg valid_4;
+reg [%3$d:0] t;
+reg [%3$d:0] t_1;
+reg [%3$d:0] t_2;
+always @(posedge clk or posedge reset)
+begin : input_pipeline
+  integer i;
+  if(reset) begin
+    valid_1 <= 0;
+    valid_2 <= 0;
+    valid_3 <= 0;
+    valid_4 <= 0;
+    t <= 0;
+    t_1 <= 0;
+    t_2 <= 0;
+  end
+  else begin
+    valid_1 <= in_valid;
+    valid_2 <= valid_1;
+    valid_3 <= valid_2;
+    valid_4 <= valid_3;
+    if(in_valid) t <= t == %7$d ? 0 : t + 1;
+    t_1 <= t;
+    t_2 <= t_1;
+    for(i = 0; i <= %5$d; i = i + 1) inputs_1[i] <= inputs[i];
+    for(i = 0; i <= %5$d; i = i + 1) inputs_2[i] <= inputs_1[i];
+  end
+end
+
+/* Pattern memories */
+reg [%6$d:0] memory_xx[0:%7$d];
+reg en_xx;
+reg we_xx;
+reg [%8$d:0] addr_xx;
+reg [%6$d:0] in_xx;
+reg [%6$d:0] out_xx;
+always @(posedge clk) begin
+  if(en_xx) begin
+    if(we_xx) memory_xx[addr_xx] <= in_xx;
+    else out_xx <= memory_xx[addr_xx];
+  end
+end
+reg [%6$d:0] memory_yy[0:%7$d];
+reg en_yy;
+reg we_yy;
+reg [%8$d:0] addr_yy;
+reg [%6$d:0] in_yy;
+reg [%6$d:0] out_yy;
+always @(posedge clk) begin
+  if(en_yy) begin
+    if(we_yy) memory_yy[addr_yy] <= in_yy;
+    else out_yy <= memory_yy[addr_yy];
+  end
+end
+
+/* Controlling the pattern memories. */
+reg xx_state;
+reg yy_state;
+reg [%9$d:0] pattern_word;
+reg [%31$d:0] pattern_byte_counter;
+reg pattern_word_complete;
+reg [%32$d:0] pattern_word_counter;
+reg pattern_pending;
+reg [1:0] pattern;
+reg [1:0] pattern_1;
+reg [1:0] pattern_2;
+reg [1:0] pattern_out;
+reg [1:0] pattern_out_1;
+reg [1:0] pattern_out_2;
+always @(posedge clk or posedge reset)
+begin : pattern_memories
+  integer i;
+  if(reset) begin
+    xx_state <= 0;
+    yy_state <= 0;
+    en_xx <= 0;
+    en_yy <= 0;
+    pattern_byte_counter <= 0;
+    pattern_word_complete <= 0;
+    pattern_word_counter <= 0;
+    pattern_pending <= 0;
+    pattern <= 0;
+    pattern_1 <= 0;
+    pattern_2 <= 0;
+    pattern_out <= 0;
+    pattern_out_1 <= 0;
+    pattern_out_2 <= 0;
+    pattern_ready <= 1;
+  end
+  else begin
+    en_xx <= 0;
+    en_yy <= 0;
+
+    pattern_1 <= pattern;
+    pattern_2 <= pattern_1;
+    pattern_out_1 <= pattern_out;
+    pattern_out_2 <= pattern_out_1;
+
+    if(in_valid) begin
+      if(xx_state == 1) begin
+        en_xx <= 1;
+        we_xx <= 0;
+        addr_xx <= t;
+      end
+      if(yy_state == 1) begin
+        en_yy <= 1;
+        we_yy <= 0;
+        addr_yy <= t;
+      end
+    end
+
+    if(pattern_valid) begin
+      for(i = 0; i <= %9$d; i = i + 1) begin
+        pattern_word[i] <= i >= %10$d ? pattern_data[i - %10$d] : pattern_word[i + 8];
+      end
+      if(pattern_byte_counter == %11$d) begin
+        pattern_byte_counter <= 0;
+      end
+      else begin
+        pattern_byte_counter <= pattern_byte_counter + 1;
+      end
+    end
+
+    pattern_word_complete <= pattern_valid && pattern_byte_counter == %11$d;
+
+    if(pattern_word_complete) begin
+      if(xx_state == 0) begin
+        en_xx <= 1;
+        we_xx <= 1;
+        addr_xx <= pattern_word_counter;
+        in_xx <= pattern_word[%6$d:0];
+      end
+      else if(yy_state == 0) begin
+        en_yy <= 1;
+        we_yy <= 1;
+        addr_yy <= pattern_word_counter;
+        in_yy <= pattern_word[%6$d:0];
+      end
+      if(pattern_word_counter == %7$d) begin
+        pattern_word_counter <= 0;
+        pattern_pending <= 1;
+        pattern_ready <= 0;
+      end
+      else begin
+        pattern_word_counter <= pattern_word_counter + 1;
+      end
+    end
+
+    if(pattern_pending && t == %7$d && in_valid) begin
+      if(xx_state == 0) begin
+        xx_state <= 1;
+        pattern <= 1;
+      end
+      else if(yy_state == 0) begin
+        yy_state <= 1;
+        pattern <= 2;
+      end
+      pattern_pending <= 0;
+    end
+
+    if(t == %7$d && in_valid) begin
+      if(pattern_out != pattern) begin
+        pattern_out <= pattern;
+        if(pattern == 1) yy_state <= 0;
+        if(pattern == 2) xx_state <= 0;
+        pattern_ready <= 1;
+      end
+    end
+  end
+end
+
+/* Initial pattern (no permutation). */
+reg [%6$d:0] c_initial;
+reg [%20$d:0] m_counter;
+reg [%22$d:0] raddr_counter;
+always @(posedge clk or posedge reset)
+begin : initial_block
+  integer i;
+  integer j;
+  if(reset) begin
+    m_counter <= 0;
+    raddr_counter <= 0;
+  end
+  else begin
+    if(valid_1) begin
+      m_counter <= t_1 == %7$d ? 0 : m_counter == %19$d ? 0 : m_counter + 1;
+      if(t_1 == %7$d) raddr_counter <= 0;
+      else if(m_counter == %19$d) raddr_counter <= raddr_counter + 1;
+%21$s    end
+  end
+end
+
+wire [%6$d:0] control_word_in;
+assign control_word_in =
+  pattern_2 == 0 ? c_initial :
+  pattern_2 == 1 ? out_xx :
+  pattern_2 == 2 ? out_yy :
+  'bX;
+wire [%6$d:0] control_word_out;
+assign control_word_out =
+  pattern_out_2 == 0 ? c_initial :
+  pattern_out_2 == 1 ? out_xx :
+  pattern_out_2 == 2 ? out_yy :
+  'bX;
+reg [%6$d:0] control_word_out_1;
+reg [%6$d:0] control_word_out_2;
+
+reg enable_data_memories;
+reg we_a;
+reg we_b;
+
+/* Memories */
+%12$s
+/* Do the switching. */
+reg mem; /* 0 write a, read b. 1 read a write b. */
+reg mem_1;
+reg mem_2;
+reg out_side; /* Done writing at least one period? */
+reg out_side_1;
+reg out_side_2;
+always @(posedge clk or posedge reset)
+begin : memory_control
+  if(reset) begin
+    mem <= 0;
+    control_word_out_1 <= 0;
+    control_word_out_2 <= 0;
+    out_side <= 0;
+    out_side_1 <= 0;
+    out_side_2 <= 0;
+%15$s  end
+  else begin
+    control_word_out_1 <= control_word_out;
+    control_word_out_2 <= control_word_out_1;
+    out_side_1 <= out_side;
+    out_side_2 <= out_side_1;
+    mem_1 <= mem;
+    mem_2 <= mem_1;
+    if(valid_2) begin
+`define enabled(i) control_word_in[i * %24$d]
+`define in_from(i) control_word_in[i * %24$d + %25$d:i * %24$d + 1]
+`define raddr(i) control_word_out[%26$d + i * %27$d:%28$d + i * %27$d]
+      enable_data_memories <= 1;
+      if(mem == 0) begin
+        we_a <= 1;
+        we_b <= 0;
+%13$s      end
+      else begin
+        we_b <= 1;
+        we_a <= 0;
+%14$s      end
+`undef raddr
+`undef in_from
+`undef enabled
+      if(t_2 == %7$d) begin
+        mem <= ~mem;
+        out_side <= 1;
+      end
+    end
+    else begin
+      enable_data_memories <= 0;
+    end
+  end
+end
+
+/* Output buffering */
+reg [%4$d:0] outputs[0:%5$d];
+%18$sreg [%4$d:0] obuf[0:%16$d];
+reg [3:0] obuf_len;
+always @(posedge clk or posedge reset)
+begin : obuf_control
+  integer i;
+  integer j;
+  if(reset) begin
+    obuf_len <= 0;
+    out_valid <= 0;
+    out_t <= %7$d;
+    in_ready <= 1;
+  end
+  else begin
+    if(valid_4 && out_side_2) begin
+`define which_mem(i) control_word_out_2[%29$d + i * %27$d:%30$d + i * %27$d]
+%17$s`undef which_mem
+      for(i = 1; i < 15; i = i + 1) begin
+        for(j = 0; j < %23$d; j = j + 1) begin
+          obuf[i * %23$d + j] <= obuf[(i - 1) * %23$d + j];
+        end
+      end
+    end
+
+    if(out_ready && obuf_len != 0) begin
+      for(i = 0; i < %23$d; i = i + 1) begin
+        outputs[i] <= obuf[(obuf_len - 1) * %23$d + i];
+      end
+      out_valid <= 1;
+      out_t <= out_t == %7$d ? 0 : out_t + 1;
+    end
+    else begin
+      out_valid <= 0;
+    end
+
+    obuf_len <= obuf_len
+      + (valid_4 && out_side_2)
+      - (out_ready && obuf_len != 0);
+
+    in_ready <= obuf_len < 3;
+  end
+end
+
+endmodule

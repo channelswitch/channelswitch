@@ -1,0 +1,65 @@
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+
+static void write_bits(
+	unsigned char *dst,
+	unsigned dst_bit_offset,
+	unsigned value,
+	unsigned n_bits)
+{
+	dst += dst_bit_offset / 8;
+	dst_bit_offset %%= 8;
+	while(n_bits) {
+		unsigned msb1 = 8 - dst_bit_offset;
+		unsigned lsb = msb1 < n_bits ? 0 : msb1 - n_bits;
+		unsigned bits_writing = msb1 - lsb;
+		unsigned mask = ((1 << msb1) - 1) & ~((1 << lsb) - 1);
+		*dst &= ~mask;
+		*dst |= (value >> (n_bits - bits_writing) << lsb) & mask;
+		n_bits -= bits_writing;
+		++dst;
+		dst_bit_offset = 0;
+	}
+}
+
+int generate_pattern_data(
+	unsigned char **data_out,
+	unsigned *data_sz_out,
+	unsigned *pattern,
+	unsigned pattern_len)
+{
+	int err = -1;
+
+	unsigned inputs = %1$d;
+	unsigned period = %2$d;
+	unsigned n = %3$d;
+	unsigned adr_bits = %4$d;
+
+	unsigned word_bits = inputs * adr_bits;
+	unsigned n_words = period;
+	unsigned bytes_per_word = (word_bits + 7) / 8;
+	unsigned n_bytes = bytes_per_word * n_words;
+
+	unsigned char *data = malloc(n_bytes);
+	if(!data) goto err0;
+
+	unsigned i;
+	for(i = 0; i < period; ++i) {
+		unsigned char *word = data + i * bytes_per_word;
+		unsigned j;
+		for(j = 0; j < inputs; ++j) {
+			unsigned pos = i * inputs + j;
+			unsigned output;
+			if(pos > pattern_len) output = pos;
+			else output = pattern[pos];
+			write_bits(word, j * adr_bits, output, adr_bits);
+		}
+	}
+
+	*data_out = data;
+	*data_sz_out = n_bytes;
+	err = 0;
+
+err1:	if(err) free(data);
+err0:	return err;
+}

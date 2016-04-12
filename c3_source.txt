@@ -1,0 +1,690 @@
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+#include <limits.h>
+
+/* I think this one is broken somehow, but it works so I'm not touching it. Use
+ * the one from c2_source.txt for new code. */
+static void write_bits(
+		unsigned char *dst,
+		unsigned dst_bit_offset,
+		unsigned value,
+		unsigned n_bits)
+{
+	dst += dst_bit_offset / 8;
+	dst_bit_offset %%= 8;
+	while(n_bits) {
+		unsigned msb1 = 8 - dst_bit_offset;
+		unsigned lsb = msb1 < n_bits ? 0 : msb1 - n_bits;
+		unsigned bits_writing = msb1 - lsb;
+		unsigned mask = ((1 << msb1) - 1) & ~((1 << lsb) - 1);
+		*dst &= ~mask;
+		*dst |= (value >> (n_bits - bits_writing) << lsb) & mask;
+		n_bits -= bits_writing;
+		++dst;
+		dst_bit_offset = 0;
+	}
+}
+
+#define INPUTS %1$d
+#define PERIOD %2$d
+
+/* Returns the smallest number of bits neccesary to hold n. */
+static unsigned ulog2(unsigned n)
+{
+	unsigned i = 0;
+	while((1 << i) - 1 < n) ++i;
+	return i;
+}
+
+static unsigned get_connections(unsigned inputs)
+{
+	if(inputs == 0) return 0;
+	if(inputs == 1) return 0;
+	if(inputs == 2) return 1;
+	return get_connections(inputs / 2) +
+		get_connections(inputs / 2 + inputs %% 2) +
+		2 * (inputs - inputs %% 2) / 2;
+}
+
+static unsigned get_depth(unsigned inputs)
+{
+	if(inputs == 0) return 0;
+	else if(inputs == 1) return 0;
+	else return 2 * ulog2(inputs - 1) - 1;
+}
+
+static int connect_all(
+		unsigned len,
+		unsigned *switches,
+		unsigned *ltr,
+		unsigned *rtl)
+{
+	if(len == 1) {
+		return 0;
+	}
+	else if(len == 2) {
+		switches[0] = ltr[0];
+		return 0;
+	}
+
+	int err = -1;
+
+	unsigned i;
+	unsigned switches_per_side = (len - len %% 2) / 2;
+
+	unsigned *top_ltr, *top_rtl;
+	unsigned *bottom_ltr, *bottom_rtl;
+
+	unsigned top_len, bottom_len;
+	top_len = len / 2;
+	bottom_len = len / 2 + len %% 2;
+
+	/* Initialize switches to not connected. */
+	for(i = 0; i < len - len %% 2; ++i) {
+		switches[i] = UINT_MAX;
+	}
+
+	top_ltr = malloc(sizeof *top_ltr * top_len);
+	if(!top_ltr) goto e_malloc_top_ltr;
+	top_rtl = malloc(sizeof *top_rtl * top_len);
+	if(!top_rtl) goto e_malloc_top_rtl;
+	bottom_ltr = malloc(sizeof *bottom_ltr * bottom_len);
+	if(!bottom_ltr) goto e_malloc_bottom_ltr;
+	bottom_rtl = malloc(sizeof *bottom_rtl * bottom_len);
+	if(!bottom_rtl) goto e_malloc_bottom_rtl;
+
+	/* The algorithm consists of following cycles and making all connections
+	 * in one direction go through the upper subnetwork and all in the other
+	 * through the lower subnetwork. Doesn't matter which direction goes
+	 * where unless the network size is odd and the last input or output is
+	 * part of the cycle, in which case LTR must go though the lower
+	 * subnetwork (because we always start from the left). */
+
+	unsigned l, r;
+	if(len %% 2) {
+		/* First do the cycle involving the last odd connections,
+		 * which is not actually a cycle. They will always be LTR
+		 * because we start and end with them. */
+		l = len - 1;
+		while(1) {
+			r = ltr[l];
+			/* Connect left to right. */
+			bottom_ltr[l / 2] = r / 2;
+			bottom_rtl[r / 2] = l / 2;
+
+			if(l != len - 1) {
+				/* We want to go through lower, so switch if
+				 * we are the upper input. */
+				switches[l / 2] = !(l %% 2);
+			}
+
+			if(r == len - 1) {
+				break;
+			}
+
+			/* Now find the other connection of this switch. */
+			r = r - r %% 2 + !(r %% 2);
+			l = rtl[r];
+
+			/* Connect right to left through the upper switch. */
+			top_rtl[r / 2] = l / 2;
+			top_ltr[l / 2] = r / 2;
+
+			switches[switches_per_side + r / 2] = r %% 2;
+
+			/* Find the next connection through this switch. */
+			l = l - l %% 2 + !(l %% 2);
+		}
+	}
+
+	/* Only cyclic cycles left. */
+	for(i = 0; i < len - len %% 2; i += 2) {
+		unsigned start = i;
+		l = start;
+		if(switches[l / 2] != UINT_MAX) continue;
+		while(1) {
+			r = ltr[l];
+
+			/* Left to right through lower switch. */
+			bottom_ltr[l / 2] = r / 2;
+			bottom_rtl[r / 2] = l / 2;
+			switches[l / 2] = !(l %% 2);
+
+			/* Other connection through right switch. */
+			r = r - r %% 2 + !(r %% 2);
+			l = rtl[r];
+
+			/* Right to left through upper switch. */
+			top_rtl[r / 2] = l / 2;
+			top_ltr[l / 2] = r / 2;
+			switches[switches_per_side + r / 2] = r %% 2;
+
+			/* Next connection. */
+			l = l - l %% 2 + !(l %% 2);
+			if(l == start) break;
+		}
+	}
+
+	unsigned *subswitches = switches + 2 * switches_per_side;
+	if(connect_all(len / 2, subswitches, top_ltr, top_rtl) < 0)
+		goto e_subnetworks;
+	subswitches += get_connections(len / 2);
+	if(connect_all(
+			len / 2 + len %% 2,
+			subswitches,
+			bottom_ltr,
+			bottom_rtl)
+		< 0) goto e_subnetworks;
+
+	err = 0;
+
+e_subnetworks:
+	free(bottom_rtl);
+e_malloc_bottom_ltr:
+	free(bottom_ltr);
+e_malloc_bottom_rtl:
+	free(top_rtl);
+e_malloc_top_rtl:
+	free(top_ltr);
+e_malloc_top_ltr:
+	return err;
+}
+
+static void get_bits_in_column(
+		unsigned inputs,
+		unsigned *unordered,
+		unsigned x,
+		unsigned *ordered,
+		unsigned *pos)
+{
+	if(inputs == 0 || inputs == 1) {
+		return;
+	}
+	if(inputs == 2) {
+		ordered[(*pos)++] = unordered[0];
+		return;
+	}
+	unsigned depth = get_depth(inputs);
+	unsigned switches_per_side = (inputs - inputs %% 2) / 2;
+	unsigned i;
+	if(x == 0) {
+		/* Left side switches. */
+		for(i = 0; i < switches_per_side; ++i) {
+			ordered[(*pos)++] = unordered[i];
+		}
+	}
+	else if(x == depth - 1) {
+		/* Right side switches. */
+		for(i = 0; i < switches_per_side; ++i) {
+			ordered[(*pos)++] = unordered[switches_per_side + i];
+		}
+	}
+	else if(x < depth - 1) {
+		/* Top subnetwork */
+		unsigned top_depth = get_depth(inputs / 2);
+		unsigned x_skip = (depth - top_depth) / 2;
+		if(x >= x_skip && (x - x_skip) < top_depth) {
+			get_bits_in_column(
+				inputs / 2,
+				unordered + 2 * switches_per_side,
+				x - x_skip,
+				ordered,
+				pos);
+		}
+
+		/* Bottom */
+		get_bits_in_column(
+			inputs / 2 + inputs %% 2,
+			unordered + 2 * switches_per_side +
+				get_connections(inputs / 2),
+			x - 1, /* Always x - 1 in lower net. */
+			ordered,
+			pos);
+	}
+}
+
+static int asbenes_permutation(
+		unsigned inputs,
+		unsigned *ltr,
+		unsigned *rtl,
+		unsigned *connections)
+{
+	int err = -1;
+	unsigned n_connections = get_connections(inputs);
+	unsigned *unordered = malloc(sizeof *unordered * n_connections);
+	if(!unordered) goto e_malloc_unordered;
+
+	connect_all(inputs, unordered, ltr, rtl);
+
+	unsigned pos = 0;
+	unsigned x;
+	for(x = 0; x < get_depth(INPUTS); ++x) {
+		get_bits_in_column(inputs, unordered, x, connections, &pos);
+	}
+
+	err = 0;
+
+	free(unordered);
+e_malloc_unordered:
+	return err;
+}
+
+static int write_asbenes_pattern(
+		unsigned inputs,
+		unsigned period,
+		unsigned char *data,
+		unsigned *bit_pos,
+		unsigned **ltr,
+		unsigned **rtl)
+{
+	int err = -1;
+	unsigned n_connections = get_connections(inputs);
+	unsigned *connections = malloc(sizeof *connections * n_connections);
+	if(!connections) goto e_malloc_connections;
+
+	unsigned i;
+	for(i = 0; i < period; ++i) {
+		unsigned j;
+		for(j = 0; j < n_connections; ++j) connections[j] = UINT_MAX;
+		if(asbenes_permutation(inputs, ltr[i], rtl[i], connections)
+			< 0) goto e_asbenes_permutation;
+		unsigned bit_pos_1 = *bit_pos - i - 1;
+		for(j = 0; j < n_connections; ++j) {
+			write_bits(data, bit_pos_1, connections[j], 1);
+			bit_pos_1 -= period;
+		}
+	}
+	*bit_pos -= period * n_connections;
+
+	err = 0;
+
+e_asbenes_permutation:
+	free(connections);
+e_malloc_connections:
+	return err;
+}
+
+static void connect_via(
+		unsigned m,
+		unsigned r,
+		unsigned **ingress_ltr,
+		unsigned **ingress_rtl,
+		unsigned **egress_ltr,
+		unsigned **egress_rtl,
+		unsigned **middle_ltr,
+		unsigned **middle_rtl,
+		unsigned left,
+		unsigned right,
+		unsigned middle)
+{
+	ingress_ltr[left / m][left %% m] = middle;
+	ingress_rtl[left / m][middle] = left %% m;
+	egress_ltr[right / m][middle] = right %% m;
+	egress_rtl[right / m][right %% m] = middle;
+	middle_ltr[middle][left / m] = right / m;
+	middle_rtl[middle][right / m] = left / m;
+}
+
+static unsigned find_egress_twin(
+		unsigned m,
+		unsigned r,
+		unsigned *lefts,
+		unsigned *ltr,
+		unsigned *left_out,
+		unsigned *right_out)
+{
+	unsigned right = *right_out;
+	unsigned i;
+	for(i = 0; i < 2 * r; ++i) {
+		if(lefts[i] == UINT_MAX) continue;
+		if(ltr[lefts[i]] == right) continue;
+		unsigned e1 = ltr[lefts[i]] / m;
+		if(e1 == right / m) {
+			*left_out = lefts[i];
+			*right_out = ltr[lefts[i]];
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static unsigned find_ingress_twin(
+		unsigned m,
+		unsigned r,
+		unsigned *lefts,
+		unsigned *ltr,
+		unsigned *left_out,
+		unsigned *right_out)
+{
+	unsigned left = *left_out;
+	unsigned i;
+	for(i = 0; i < 2 * r; ++i) {
+		if(lefts[i] == UINT_MAX) continue;
+		if(lefts[i] == left) continue;
+		unsigned i1 = lefts[i] / m;
+		if(i1 == left / m) {
+			*left_out = lefts[i];
+			*right_out = ltr[lefts[i]];
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static int clos_connect(
+		unsigned m,
+		unsigned r,
+		unsigned **ingress_ltr,
+		unsigned **ingress_rtl,
+		unsigned **egress_ltr,
+		unsigned **egress_rtl,
+		unsigned **middle_ltr,
+		unsigned **middle_rtl,
+		unsigned *all_ltr,
+		unsigned *all_rtl)
+{
+#define VIA(left, middle, right) connect_via(m, r, ingress_ltr, ingress_rtl, \
+		egress_ltr, egress_rtl, middle_ltr, middle_rtl, \
+		left, right, middle)
+	int err = -1;
+
+	/* Holds all current connections through the two middle switches
+	 * middle_w_in_free and middle_w_out_free when rearranging. */
+	unsigned *tmp, *upper, *lower;
+	tmp = malloc(sizeof *tmp * r * 4);
+	if(!tmp) goto e_malloc_tmp;
+
+	upper = tmp + 2 * r;
+	lower = tmp + 3 * r;
+
+	unsigned i;
+
+	for(i = 0; i < m * r; ++i) {
+		/* Connect i to all_ltr[i]. */
+		unsigned j;
+		unsigned ingress_switch, ingress_input,
+			egress_switch, egress_output;
+		ingress_switch = i / m;
+		ingress_input = i %% m;
+		egress_switch = all_ltr[i] / m;
+		egress_output = all_ltr[i] %% m;
+		unsigned a, b;
+		for(j = 0; j < m; ++j) {
+			if(ingress_rtl[ingress_switch][j] == UINT_MAX) a = j;
+			if(egress_ltr[egress_switch][j] == UINT_MAX) b = j;
+			if(ingress_rtl[ingress_switch][j] == UINT_MAX &&
+				egress_ltr[egress_switch][j] == UINT_MAX) break;
+		}
+		if(a == b) {
+			/* Connect directly. */
+			VIA(i, a, all_ltr[i]);
+		}
+		else {
+			/* Find connections to rearrange. */
+			for(j = 0; j < r; ++j) {
+				tmp[j] = ingress_rtl[j][a] == UINT_MAX ?
+					UINT_MAX :
+					j * m + ingress_rtl[j][a];
+			}
+			for(j = 0; j < r; ++j) {
+				tmp[r + j] = ingress_rtl[j][b] == UINT_MAX ?
+					UINT_MAX :
+					j * m + ingress_rtl[j][b];
+			}
+			/* Disconnect them. */
+			for(j = 0; j < 2 * r; ++j) {
+				if(tmp[j] == UINT_MAX) continue;
+				unsigned ingress_switch,
+					ingress_input,
+					ingress_output,
+					middle_switch,
+					middle_input,
+					middle_output,
+					egress_switch,
+					egress_input,
+					egress_output;
+				ingress_switch = tmp[j] / m;
+				ingress_input = tmp[j] %% m;
+				ingress_output = ingress_ltr
+					[ingress_switch][ingress_input];
+				egress_switch = all_ltr[tmp[j]] / m;
+				egress_output = all_ltr[tmp[j]] %% m;
+				egress_input = egress_rtl
+					[egress_switch][egress_output];
+				middle_switch = ingress_output;
+				middle_input = ingress_switch;
+				middle_output = egress_switch;
+				ingress_ltr[ingress_switch]
+					[ingress_input] = UINT_MAX;
+				ingress_rtl[ingress_switch]
+					[ingress_output] = UINT_MAX;
+				middle_ltr[middle_switch]
+					[middle_input] = UINT_MAX;
+				middle_rtl[middle_switch]
+					[middle_output] = UINT_MAX;
+				egress_ltr[egress_switch]
+					[egress_input] = UINT_MAX;
+				egress_rtl[egress_switch]
+					[egress_output] = UINT_MAX;
+			}
+			/* Add the current connection (doesn't need to be
+			 * disconnected). */
+			for(j = 0; j < 2 * r; ++j) {
+				if(tmp[j] == UINT_MAX) {
+					tmp[j] = i;
+					break;
+				}
+			}
+			/* Now go through all connections in tmp, routing them
+			 * through a when going right and b when going left. */
+			unsigned n_upper = 0, n_lower = 0;
+			for(j = 0; j < 2 * r; ++j) {
+				if(tmp[j] == UINT_MAX) continue;
+				/* Already reconnected? */
+				if(ingress_ltr[tmp[j] / m][tmp[j] %% m] !=
+					UINT_MAX) continue;
+
+				unsigned left, right;
+				left = tmp[j];
+				right = all_ltr[left];
+				while(1) {
+					/* Connect via a. */
+					VIA(left, a, right);
+					/* Find the next connection through the
+					 * same egress switch. */
+					if(!find_egress_twin(m, r, tmp, all_ltr,
+						&left, &right)) break;
+					/* Already connected - cycle done */
+					if(ingress_ltr[left / m][left %% m] !=
+						UINT_MAX) goto end_of_cycle;
+
+					/* Connect via b. */
+					VIA(left, b, right);
+					if(!find_ingress_twin(m, r, tmp,
+						all_ltr, &left, &right)) break;
+					/* Already connected - cycle done */
+					if(ingress_ltr[left / m][left %% m] !=
+						UINT_MAX) goto end_of_cycle;
+				}
+				/* Now go in the other direction from tmp[j] in
+				 * case we started in the middle of a list that
+				 * was not a cycle. */
+				left = tmp[j];
+				right = all_ltr[left];
+				while(1) {
+					if(!find_ingress_twin(m, r, tmp,
+						all_ltr, &left, &right)) break;
+					VIA(left, b, right);
+
+					if(!find_egress_twin(m, r, tmp, all_ltr,
+						&left, &right)) break;
+					VIA(left, a, right);
+				}
+end_of_cycle:;
+			}
+		}
+	}
+
+	err = 0;
+
+	free(tmp);
+e_malloc_tmp:
+	return err;
+#undef VIA
+}
+
+static int write_memories_pattern(
+		unsigned inputs,
+		unsigned period,
+		unsigned char *data,
+		unsigned *bit_pos,
+		unsigned **ltr,
+		unsigned **rtl)
+{
+	unsigned adr_bits = ulog2(period - 1);
+	unsigned i;
+	for(i = 0; i < inputs; ++i) {
+		unsigned j;
+		j = period;
+		while(j) {
+			--j;
+			*bit_pos -= adr_bits;
+			write_bits(data, *bit_pos, rtl[i][j], adr_bits);
+		}
+	}
+	return 0;
+}
+
+int generate_pattern_data(
+		unsigned char **data_out,
+		unsigned *data_sz_out,
+		unsigned *pattern,
+		unsigned pattern_len)
+{
+	int err = -1;
+	if(pattern_len != INPUTS * PERIOD) goto e_args;
+	unsigned n_connections;
+	n_connections = get_connections(INPUTS);
+
+	unsigned *rtl = malloc(sizeof *rtl * pattern_len);
+	if(!rtl) goto e_malloc_rtl;
+
+	unsigned i;
+	for(i = 0; i < pattern_len; ++i) rtl[pattern[i]] = i;
+
+	unsigned total_pattern_bits =
+		n_connections * PERIOD + /* Ingress */
+		ulog2(PERIOD - 1) * PERIOD * INPUTS + /* Middle */
+		n_connections * PERIOD; /* Egress */
+
+	*data_sz_out = (total_pattern_bits + 7) / 8;
+	*data_out = malloc(*data_sz_out);
+	if(!*data_out) goto e_malloc_data_out;
+
+	unsigned m = INPUTS;
+	unsigned r = PERIOD;
+	unsigned **ingress_ltr,
+		**ingress_rtl,
+		**middle_ltr,
+		**middle_rtl,
+		**egress_ltr,
+		**egress_rtl;
+
+	ingress_ltr = malloc(sizeof *ingress_ltr * r);
+	if(!ingress_ltr) goto e_malloc_ingress_ltr;
+	ingress_rtl = malloc(sizeof *ingress_rtl * r);
+	if(!ingress_rtl) goto e_malloc_ingress_rtl;
+	egress_ltr = malloc(sizeof *egress_ltr * r);
+	if(!egress_ltr) goto e_malloc_egress_ltr;
+	egress_rtl = malloc(sizeof *egress_rtl * r);
+	if(!egress_rtl) goto e_malloc_egress_rtl;
+	middle_ltr = malloc(sizeof *middle_ltr * m);
+	if(!middle_ltr) goto e_malloc_middle_ltr;
+	middle_rtl = malloc(sizeof *middle_rtl * m);
+	if(!middle_rtl) goto e_malloc_middle_rtl;
+	for(i = 0; i < r; ++i) {
+		ingress_ltr[i] = malloc(sizeof *ingress_ltr[i] * m);
+		if(!ingress_ltr[i]) goto e_malloc_ingress_ltr_i;
+		ingress_rtl[i] = malloc(sizeof *ingress_rtl[i] * m);
+		if(!ingress_rtl[i]) goto e_malloc_ingress_rtl_i;
+		egress_ltr[i] = malloc(sizeof *egress_ltr[i] * m);
+		if(!egress_ltr[i]) goto e_malloc_egress_ltr_i;
+		egress_rtl[i] = malloc(sizeof *egress_rtl[i] * m);
+		if(!egress_rtl[i]) goto e_malloc_egress_rtl_i;
+	}
+	for(i = 0; i < m; ++i) {
+		middle_ltr[i] = malloc(sizeof *middle_ltr * r);
+		if(!middle_ltr[i]) goto e_malloc_middle_ltr_i;
+		middle_rtl[i] = malloc(sizeof *middle_rtl * r);
+		if(!middle_rtl[i]) goto e_malloc_middle_rtl_i;
+	}
+
+	/* Inititalize. UINT_MAX means not connected. */
+	for(i = 0; i < r; ++i) {
+		unsigned j;
+		for(j = 0; j < m; ++j) ingress_ltr[i][j] = UINT_MAX;
+		for(j = 0; j < m; ++j) ingress_rtl[i][j] = UINT_MAX;
+		for(j = 0; j < m; ++j) egress_ltr[i][j] = UINT_MAX;
+		for(j = 0; j < m; ++j) egress_rtl[i][j] = UINT_MAX;
+	}
+	for(i = 0; i < m; ++i) {
+		unsigned j;
+		for(j = 0; j < r; ++j) middle_ltr[i][j] = UINT_MAX;
+		for(j = 0; j < r; ++j) middle_rtl[i][j] = UINT_MAX;
+	}
+
+	if(clos_connect(m, r, ingress_ltr, ingress_rtl, egress_ltr, egress_rtl,
+		middle_ltr, middle_rtl, pattern, rtl) < 0) goto e_clos_connect;
+
+	unsigned bit_pos = *data_sz_out * 8;
+
+	if(write_asbenes_pattern(INPUTS, PERIOD, *data_out, &bit_pos,
+			ingress_ltr, ingress_rtl) < 0) goto e_write_ingress;
+	if(write_memories_pattern(INPUTS, PERIOD, *data_out, &bit_pos,
+			middle_ltr, middle_rtl) < 0) goto e_write_middle;
+	if(write_asbenes_pattern(INPUTS, PERIOD, *data_out, &bit_pos,
+			egress_ltr, egress_rtl) < 0) goto e_write_ingress;
+
+	err = 0;
+
+e_write_egress:
+e_write_middle:
+e_write_ingress:
+e_clos_connect:
+	i = m;
+	while(i--) {
+		free(middle_rtl[i]);
+e_malloc_middle_rtl_i:
+		free(middle_ltr[i]);
+e_malloc_middle_ltr_i:;
+	}
+	i = r;
+	while(i--) {
+		free(egress_rtl[i]);
+e_malloc_egress_rtl_i:
+		free(egress_ltr[i]);
+e_malloc_egress_ltr_i:
+		free(ingress_rtl[i]);
+e_malloc_ingress_rtl_i:
+		free(ingress_ltr[i]);
+e_malloc_ingress_ltr_i:;
+	}
+	free(middle_rtl);
+e_malloc_middle_rtl:
+	free(middle_ltr);
+e_malloc_middle_ltr:
+	free(egress_rtl);
+e_malloc_egress_rtl:
+	free(egress_ltr);
+e_malloc_egress_ltr:
+	free(ingress_rtl);
+e_malloc_ingress_rtl:
+	free(ingress_ltr);
+e_malloc_ingress_ltr:
+	if(err) free(*data_out);
+e_malloc_data_out:
+	free(rtl);
+e_malloc_rtl:
+e_args:
+	return err;
+}

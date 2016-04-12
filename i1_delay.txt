@@ -1,0 +1,12 @@
+reg [%7$d:0] t_%1$d;
+%2$s%3$salways @(posedge clk or posedge reset)
+begin : stage%1$d
+	integer i;
+	if(reset) begin
+%4$s%5$s		t_%1$d <= 0;
+	end
+	else if(enable) begin
+%6$s		t_%1$d <= t_%8$d - %9$d;
+	end
+end
+

@@ -1,0 +1,130 @@
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
+#include <assert.h>
+
+#define INPUTS %1$d
+#define PERIOD %2$d
+#define CONTROL_BITS %3$d
+
+static void write_bits(
+		unsigned char *dst,
+		unsigned dst_bit_offset,
+		unsigned value,
+		unsigned n_bits)
+{
+	unsigned i;
+	for(i = 0; i < n_bits; ++i) {
+		unsigned bit_offs = dst_bit_offset + i;
+		unsigned byte = bit_offs / 8;
+		unsigned bit = bit_offs %% 8;
+		if((value >> i) & 1) dst[byte] |= 1 << bit;
+		else dst[byte] &= ~(1 << bit);
+	}
+}
+
+/* Returns the smallest number of bits neccesary to hold n. */
+static unsigned ulog2(unsigned n)
+{
+	unsigned i = 0;
+	while((1 << i) - 1 < n) ++i;
+	return i;
+}
+
+int generate_pattern_data(
+		unsigned char **data_out,
+		unsigned *data_sz_out,
+		unsigned *pattern,
+		unsigned pattern_len)
+{
+	int ret = -1;
+	unsigned inputs = INPUTS;
+	unsigned period = PERIOD;
+	unsigned n = inputs * period;
+	if(pattern_len != n) goto e_args;
+
+	unsigned *work = malloc(sizeof *work * n);
+	if(!work) goto e_malloc_work;
+	memcpy(work, pattern, sizeof *work * n);
+
+	unsigned word_len = (CONTROL_BITS + 7) / 8;
+	unsigned data_sz = period * word_len;
+	unsigned char *data = malloc(data_sz);
+	if(!data) goto e_malloc_data;
+
+	unsigned stage_bit_pos = 0;
+	unsigned pipeline_delay = 0;
+	unsigned x = 0;
+	unsigned i, j;
+	for(i = 0; i < ulog2(n) - 1; ++i)
+	for(j = i + 1; j--;) {
+		unsigned same_color_width = 2 * (1 << i);
+		unsigned skip = 1 << j;
+		unsigned groups = same_color_width / (2 * skip);
+		unsigned k, l, m;
+		unsigned is_delay = skip >= inputs;
+		unsigned delay = is_delay ? skip / inputs + 1 : 1;
+		unsigned bit = 0;
+		for(k = 0; k < n / same_color_width; ++k)
+		for(l = 0; l < groups; ++l)
+		for(m = 0; m < skip; ++m) {
+			unsigned direction = k %% 2; /* 0 down, 1 up */
+			unsigned y0 = k * same_color_width + l * skip * 2 + m;
+			unsigned y1 = y0 + skip;
+			unsigned to_swap;
+			if(direction && work[y1] > work[y0] ||
+					!direction && work[y0] >= work[y1]) {
+				unsigned tmp = work[y0];
+				work[y0] = work[y1];
+				work[y1] = tmp;
+				to_swap = 1;
+			}
+			else {
+				to_swap = 0;
+			}
+
+			unsigned t0 = (y0 / inputs + pipeline_delay) %% period;
+			unsigned t1 = (y1 / inputs + pipeline_delay) %% period;
+			unsigned bit_pos = stage_bit_pos + bit;
+			if(!is_delay) {
+				/* Swap */
+				write_bits(data + t0 * word_len,
+						bit_pos,
+						to_swap,
+						1);
+			}
+			else {
+				/* Delay */
+				write_bits(data + t0 * word_len,
+						bit_pos,
+						0,
+						1);
+				write_bits(data + t1 * word_len,
+						bit_pos,
+						to_swap,
+						1);
+			}
+			++bit;
+			if(is_delay && bit >= inputs ||
+					!is_delay && bit >= inputs / 2) {
+				bit = 0;
+			}
+		}
+		++x;
+		pipeline_delay += delay;
+		stage_bit_pos += is_delay ? inputs : inputs / 2;
+	}
+
+	ret = 0;
+	*data_out = data;
+	*data_sz_out = data_sz;
+
+	if(ret) free(data);
+e_malloc_data:
+	free(work);
+e_malloc_work:
+e_args:
+	return ret;
+}

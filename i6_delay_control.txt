@@ -1,0 +1,15 @@
+reg nonempty_%1$d;
+reg pattern_used_%1$d;
+always @(posedge clk or posedge reset) begin
+  if(reset) begin
+    nonempty_%1$d <= 0;
+    pattern_used_%1$d <= 1;
+  end
+  else begin
+    if(valid_2 && t_2 == %3$d) begin
+      nonempty_%1$d <= nonempty_%2$d;
+      pattern_used_%1$d <= pattern_used_%2$d;
+    end
+  end
+end
+

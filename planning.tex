@@ -1,0 +1,119 @@
+\documentclass[12pt]{report}
+\usepackage[utf8]{inputenc}
+\usepackage{graphicx}
+\usepackage{wrapfig}
+
+\begin{document}
+
+\title {
+	{Time-Multiplexed Switches for Frequency Reallocation
+		-- Planning Report}\\
+	{\large Linköping University}
+}
+
+\author{Roland Stenholm}
+\date{2015-10-15}
+
+\maketitle
+
+\section{Background}
+
+In a frequency reallocation application, inputs need to be mapped to outputs in
+a user-defined fashion. The application runs at a higher clock speed than its
+sample rate, and saves resources by reusing the same components for multiple
+streams. In one case, 1024 samples from an equal number of channels are
+processed in 256 clock cycles. Each stage of the process thus has 4 inputs and
+4 outputs and processes different channels each clock cycle with a period of
+256.
+
+The switch is able to move any input sample to any of the four outputs and to
+reorder samples in time by up to 256 clock cycles. This means that the switch
+must delay the stream for long enough that the last input can be output first
+if needed. The number of channels and the number of samples that are processed
+in parallel are parameters of the hardware.
+
+No information on this exact problem has been found. The literature about
+switches that lack this time multiplexing may or may not be useful. The problem
+has similarities with interleaving used for forward error correction, but the
+information on that often assumes a known pattern of permutation. Information
+about sorting networks is useful in some cases. Clos networks may be relevant.
+
+\section{Approach}
+
+This thesis work shall explore multiple approaches to creating such a switch.
+The approaches shall be compared in terms of chip area used with different
+numbers of concurrent inputs and clock cycles in a period. The switch shall
+be reconfigurable at runtime with no restrictions on the possible permutations
+save for the aforementioned parameters. It will come with software that takes
+an arbitrary permutation and generates the data to make the hardware perform
+that permutation.
+
+The latency of the switch, the time it takes to apply a new permutation in
+hardware and the complexity of the software used to generate permutations are
+not important for the application as it concerns broadcasting and permutations
+will rarely be changed.
+
+A program will be created to generate a synthesizable Verilog description of
+a switch given the number of parallel samples, the period and the type of
+switch as parameters. It shall also generate the controlling software as
+described above. Each type of switch will be synthesized with a range of
+parameters and the chip resources used will be recorded. The report shall
+answer at least the following questions: What types of switch are tested? How
+do each of the types scale when the number of parallel connections increases?
+How do they scale when the period increases? For any given number of inputs and
+period, which is the smallest?
+
+\section{The bitonic switch}
+
+\begin{wrapfigure}{r}{.7\textwidth}
+\begin{center}
+\includegraphics[width=.7\textwidth]{bitonic.eps}
+\end{center}
+\caption{Bitonic sorter with 8 inputs. The arrows show where the larger number
+	goes.}
+\label{fig:bitonic}
+\end{wrapfigure}
+
+It has already been decided that one of the switch types shall be based on a
+time-multiplexed version of a bitonic sorting network due to its appropriate
+symmetry and relative simplicity.
+
+The starting point is a bitonic sorting network with as many elements as there
+are channels. Each input is paired with an output address read from a memory.
+To multiplex this over time, only $n$ rows are sorted at a time, where $n$ is
+the number of parallel samples. Each group of $n$ lines in a traditional
+bitonic sorter correponds to one clock cycle in this implementstion. The
+simplification comes from the fact that if $n$ is a power of two then each
+compare-swap element in each stage can perform swaps between the same two
+lines each clock cycle, or between only one line at different points in time
+for those that cross the boundary between different clock cycles.
+
+Figure \ref{fig:bitonic} shows how a bitonic sorting network with 8 inputs is
+multiplexed over two clock cycles. The inputs during the first clock cycle
+correspond to those above the dotted line and during the second, those below it.
+The tall boxes compare and exchange their inputs. The longer boxes are memories,
+which compare their inputs with their inputs the next clock cycle. The memories
+delay everything after them by some clock cycles.
+
+\section{Time plan}
+
+\begin{tabular}{r l}
+	Sometime Sep 2015 & Beginning of thesis work \\
+	Oct 2015 & Testbench and bitonic switch done \\
+	Late Oct 2015 & Midpoint check of the project \\
+	Early Nov 2015 & Formal registration of thesis work at the university \\
+	Nov/Dec 2015 & Other switch/switches also done \\
+	Dec 2015 & Report done \\
+	Dec 2015 & Presentation of thesis \\
+	Dec 2015 & Handin of report and end of the project \\
+\end{tabular}
+
+\section{Preliminary results}
+
+At the mid point of the project, the work shall be shown to the examiner. At
+that point, at least one implementation shall be completed. Programs and
+documentation has been written. Performance can be measured and an initial
+version of the report exists. All that is left is to create other
+implementations, test them and write about them in the report.
+
+\end{document}

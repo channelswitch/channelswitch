@@ -1,0 +1,329 @@
+%%%%%%%%%%%%%%%%%%
+%%%  Strings   %%%
+%%%%%%%%%%%%%%%%%%
+
+\newcommand{\university@engname}{Link\"{o}ping University}
+\newcommand{\university@swename}{Link\"{o}pings universitet}
+\newcommand{\university@engcountry}{Sweden}
+\newcommand{\university@swecountry}{Sverige}
+\newcommand{\department@engname}{\emph{No department selected!}}
+\newcommand{\department@swename}{\emph{No department selected!}}
+\newcommand{\department@engaddr}{\emph{No department selected!}}
+\newcommand{\department@sweaddr}{\emph{No department selected!}}
+\newcommand{\department@city}{\emph{No department selected!}}
+\let\department@campus\@empty
+
+\newcommand{\department@engaddr@maybecountry}{\department@engaddr, \university@engcountry}
+\newcommand{\department@sweaddr@maybecountry}{\department@sweaddr}
+\newcommand{\department@engaddr@threelines}{\department@engname\\\university@engname\\\department@engaddr, \university@engcountry}
+\newcommand{\department@sweaddr@threelines}{\university@swename\\\department@swename\\\department@sweaddr}
+\newcommand{\department@engaddr@threelines@depfirst}{\department@engname\\\university@engname\\\department@engaddr, \university@engcountry}
+\newcommand{\department@sweaddr@threelines@depfirst}{\department@swename\\\university@swename\\\department@sweaddr}
+
+\newcommand{\department@splitaddr}{%
+  \department@engname \hfill Link\"{o}pings tekniska h\"{o}gskola\\%
+  Link\"{o}pings universitet \hfill
+  Link\"{o}pings universitet%
+  \ifx\department@campus\@empty%
+  \else%
+  , \department@campus%
+  \fi%
+  \\%
+  \department@engaddr, \university@engcountry \hfill \department@sweaddr%
+}
+
+\newcommand*{\monthName@eng}[1]{\ifcase#1\or
+  January\or February\or March\or
+  April\or May\or June\or
+  July\or August\or September\or
+  October\or November\or December\else Unknown\fi}
+
+\newcommand*{\monthName@swe}[1]{\ifcase#1\or
+  januari\or februari\or mars\or
+  april\or maj\or juni\or
+  juli\or augusti\or september\or
+  oktober\or november\or december\else m{\aa}nad\fi}
+
+\newcommand{\longdate@eng}{\monthName@eng{\thesis@month} \thesis@day, \thesis@year}
+\newcommand{\longdate@swe}{\thesis@day\ \monthName@swe{\thesis@month} \thesis@year}
+
+%%%%%%%%%%%%%%%%%%%
+%%%  Captions   %%%
+%%%%%%%%%%%%%%%%%%%
+
+\providecommand*\in@name{in}
+\ifx\thesis@type\thesistypebsc
+  \providecommand*\thesis@typename{Bachelor of Science Thesis}
+\else
+  \providecommand*\thesis@typename{Master of Science Thesis}
+\fi
+\providecommand*\examiner@name{Examiner}
+\providecommand*\supervisor@name{Supervisor}
+\let\monthName\monthName@eng
+\let\@longdate\longdate@eng
+\let\university@name\university@engname
+\let\university@country\university@engcountry
+\let\department@name\department@engname
+\let\department@addr\department@engaddr
+\let\department@addr@maybecountry\department@engaddr@maybecountry
+\let\department@addr@threelines\department@engaddr@threelines
+\let\department@addr@threelines@depfirst\department@engaddr@threelines@depfirst
+
+
+\addto{\captionsenglish}{%
+  \renewcommand*\in@name{in}
+  \ifx\thesis@type\thesistypebsc
+    \renewcommand*\thesis@typename{Bachelor of Science Thesis}
+  \else
+    \renewcommand*\thesis@typename{Master of Science Thesis}
+  \fi
+  \renewcommand*\examiner@name{Examiner}%
+  \renewcommand*\supervisor@name{Supervisor}%
+  \let\monthName\monthName@eng
+  \let\@longdate\longdate@eng
+  \let\university@name\university@engname
+  \let\university@country\university@engcountry
+  \let\department@name\department@engname
+  \let\department@addr\department@engaddr
+  \let\department@addr@threelines\department@engaddr@threelines
+  \let\department@addr@threelines@depfirst\department@engaddr@threelines@depfirst
+  \let\department@addr@maybecountry\department@engaddr@maybecountry
+}
+\addto{\captionsswedish}{%
+  \renewcommand*\in@name{i}
+  \ifx\thesis@type\thesistypebsc
+    \renewcommand*\thesis@typename{Kandidatuppsats}
+  \else
+    \renewcommand*\thesis@typename{Masteruppsats}
+  \fi
+  \renewcommand*\examiner@name{Examinator}%
+  \renewcommand*\supervisor@name{Handledare}%
+  \let\monthName\monthName@swe
+  \let\@longdate\longdate@swe
+  \let\university@name\university@swename
+  \let\university@country\university@swecountry
+  \let\department@name\department@swename
+  \let\department@addr\department@sweaddr
+  \let\department@addr@threelines\department@sweaddr@threelines
+  \let\department@addr@threelines@depfirst\department@sweaddr@threelines@depfirst
+  \let\department@addr@maybecountry\department@sweaddr@maybecountry
+  \renewcommand*\abstractname{Sammanfattning}%% Override the rtthesis default
+}
+
+%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  Miscellaneous   %%%
+%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand*{\AND}{\\\>\bfseries\ignorespaces}%
+\newcommand*{\AT}{\\\>\>\small\ignorespaces}%
+
+
+%%%%%%%%%%%%%%%%%%%%
+%%%  Title page  %%%
+%%%%%%%%%%%%%%%%%%%%
+
+\renewcommand*\maketitle{%
+  \frontmatter
+  \cleardoublepage%
+  \thispagestyle{empty}%
+  \vspace*{-22mm}%
+  \hspace*{-10mm}%
+  \noindent\parbox[l][0pt][t]{0pt}{%
+    \begin{minipage}[t][\paperheight-15mm][t]{\paperwidth-35mm}%
+      \raggedright%
+      \sffamily%
+      \begin{large}%
+        \thesis@typename\ \in@name\ \thesis@subject\par%
+        \department@name, \university@name, \thesis@year\par%
+      \end{large}%
+      \vspace*{50mm}%
+      {\fontsize{11mm}{13mm}\selectfont\@title\par}%
+      \ifrt@subtitle%
+      \bigskip%
+      \begin{huge}\@subtitle\par\end{huge}%
+      \fi%
+      \vspace*{10mm}%
+      \begin{LARGE}\textbf{\@author}\par\end{LARGE}%
+      \vspace*{\stretch{6}}%
+      \hspace*{-5mm}\includegraphics[width=85mm]{LiU_primary_black}%
+    \end{minipage}}
+  \clearpage
+  \thispagestyle{empty}
+
+  \vspace*{\stretch{1}}
+  \noindent\rtcoverinfo
+  \vspace*{\stretch{4}}
+  \begin{center}
+    \thesis@typename\ \in@name\ \thesis@subject\par%
+    \smallskip%
+    \textbf{\textsf{\@title\ifrt@subtitle\@subtitlesep\@subtitle\fi}}\par%
+    \smallskip%
+    \@author\par%
+    \smallskip%
+    \@isrn\par%
+    \smallskip%
+    \parbox{10cm}{\raggedright%
+      \rule{10cm}{\z@}%
+      \begin{tabbing}%
+        \hspace*{25mm}\=\quad\=\kill%
+        \supervisor@name:\>\bfseries\thesis@supervisor\\[.5\baselineskip]%
+        \examiner@name:\>\bfseries\thesis@examiner%
+      \end{tabbing}%
+    }
+    \par\bigskip\smallskip%
+    {\slshape
+      \thesis@division\\
+      \department@name \\
+      Link\"{o}ping University \\
+      \department@addr@maybecountry}
+    \par\bigskip%
+    Copyright \copyright~\thesis@year~\@author\par%
+    \normalsize
+  \end{center}
+  \clearemptydoublepage
+
+  \ifx\dedic@tion\@empty%
+  \else
+    \thispagestyle{empty}
+    \vspace*{70mm}
+    \begin{flushright}
+      \textsl{\dedic@tion}
+    \end{flushright}
+    \clearemptydoublepage
+  \fi
+}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  Details for specific departments  %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%%%  Department: IDA
+\newcommand{\department@engname@IDA}{Department of Computer and Information Science}
+\newcommand{\department@swename@IDA}{Institutionen f\"{o}r datavetenskap}
+\newcommand{\department@engaddr@IDA}{SE-581~83 Link\"{o}ping}
+\newcommand{\department@sweaddr@IDA}{581~83 Link\"{o}ping}
+\newcommand{\department@city@IDA}{Link\"{o}ping}
+\let\department@campus@IDA\@empty
+
+%%%  Department: IFM
+\newcommand{\department@engname@IFM}{Department of Physics, Chemistry and Biology}
+\newcommand{\department@swename@IFM}{Institutionen f\"{o}r Fysik, Kemi och Biologi}
+\newcommand{\department@engaddr@IFM}{SE-581~83 Link\"{o}ping}
+\newcommand{\department@sweaddr@IFM}{581~83 Link\"{o}ping}
+\newcommand{\department@city@IFM}{Link\"{o}ping}
+\let\department@campus@IFM\@empty
+
+
+%%%  Department: IEI
+\newcommand{\department@engname@IEI}{Department of Management and Engineering}
+\newcommand{\department@swename@IEI}{Institutionen f\"{o}r ekonomisk och industriell utveckling}
+\newcommand{\department@engaddr@IEI}{SE-581~83 Link\"{o}ping}
+\newcommand{\department@sweaddr@IEI}{581~83 Link\"{o}ping}
+\newcommand{\department@city@IEI}{Link\"{o}ping}
+\let\department@campus@IEI\@empty
+
+
+%%%  Department: ISY
+\newcommand{\department@engname@ISY}{Department of Electrical Engineering}
+\newcommand{\department@swename@ISY}{Institutionen f\"{o}r systemteknik}
+\newcommand{\department@engaddr@ISY}{SE-581~83 Link\"{o}ping}
+\newcommand{\department@sweaddr@ISY}{581~83 Link\"{o}ping}
+\newcommand{\department@city@ISY}{Link\"{o}ping}
+\let\department@campus@ISY\@empty
+
+%%%  Department: ITN
+\newcommand{\department@engname@ITN}{Department of Science and Technology}
+\newcommand{\department@swename@ITN}{Institutionen f\"{o}r teknik och naturvetenskap}
+\newcommand{\department@engaddr@ITN}{SE-601~74 Norrk\"{o}ping}
+\newcommand{\department@sweaddr@ITN}{601~74 Norrk\"{o}ping}
+\newcommand{\department@city@ITN}{Norrk\"{o}ping}
+\newcommand{\department@campus@ITN}{Campus Norrk\"{o}ping}
+
+%%%  Department: MAI
+\newcommand{\department@engname@MAI}{Department of Mathematics}
+\newcommand{\department@swename@MAI}{Matematiska institutionen}
+\newcommand{\department@engaddr@MAI}{SE-581~83 Link\"{o}ping}
+\newcommand{\department@sweaddr@MAI}{581~83 Link\"{o}ping}
+\newcommand{\department@city@MAI}{Link\"{o}ping}
+\let\department@campus@MAI\@empty
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%  Select department  %%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\newcommand{\selectDepartment}{%
+  \def\departmentkey@ida{ida}
+  \def\departmentkey@ifm{ifm}
+  \def\departmentkey@iei{iei}
+  \def\departmentkey@isy{isy}
+  \def\departmentkey@itn{itn}
+  \def\departmentkey@mai{mai}
+  \ifx\thesis@department\@empty
+  \ClassError{rtthesis}{%
+    When the thesis type is `msc', the department\MessageBreak
+    must be set via the key <department> in setupThesis%
+  }{%
+    When the thesis type is `msc', the department\MessageBreak
+    must be set via the key <department> in setupThesis%
+  }%
+  \else\ifx\thesis@department\departmentkey@ida
+  \let\department@engname\department@engname@IDA
+  \let\department@swename\department@swename@IDA
+  \let\department@engaddr\department@engaddr@IDA
+  \let\department@sweaddr\department@sweaddr@IDA
+  \let\department@city\department@city@IDA
+  \let\department@campus\department@campus@IDA
+  \else\ifx\thesis@department\departmentkey@ifm
+  \let\department@engname\department@engname@IFM
+  \let\department@swename\department@swename@IFM
+  \let\department@engaddr\department@engaddr@IFM
+  \let\department@sweaddr\department@sweaddr@IFM
+  \let\department@city\department@city@IFM
+  \let\department@campus\department@campus@IFM
+  \else\ifx\thesis@department\departmentkey@iei
+  \let\department@engname\department@engname@IEI
+  \let\department@swename\department@swename@IEI
+  \let\department@engaddr\department@engaddr@IEI
+  \let\department@sweaddr\department@sweaddr@IEI
+  \let\department@city\department@city@IEI
+  \let\department@campus\department@campus@IEI
+  \else\ifx\thesis@department\departmentkey@isy
+  \let\department@engname\department@engname@ISY
+  \let\department@swename\department@swename@ISY
+  \let\department@engaddr\department@engaddr@ISY
+  \let\department@sweaddr\department@sweaddr@ISY
+  \let\department@city\department@city@ISY
+  \let\department@campus\department@campus@ISY
+  \else\ifx\thesis@department\departmentkey@itn
+  \let\department@engname\department@engname@ITN
+  \let\department@swename\department@swename@ITN
+  \let\department@engaddr\department@engaddr@ITN
+  \let\department@sweaddr\department@sweaddr@ITN
+  \let\department@city\department@city@ITN
+  \let\department@campus\department@campus@ITN
+  \else\ifx\thesis@department\departmentkey@mai
+  \let\department@engname\department@engname@MAI
+  \let\department@swename\department@swename@MAI
+  \let\department@engaddr\department@engaddr@MAI
+  \let\department@sweaddr\department@sweaddr@MAI
+  \let\department@city\department@city@MAI
+  \let\department@campus\department@campus@MAI
+  \else
+  \ClassError{rtthesis}{%
+    setupThesis was called with an invalid value for\MessageBreak
+    the key <department>.  Valid values are listed in\MessageBreak
+    the documentation%
+  }{%
+    setupThesis was called with an invalid value for\MessageBreak
+    the key <department>.  Valid values are listed in\MessageBreak
+    the documentation%
+  }%
+  \fi\fi\fi\fi\fi\fi\fi
+  \ifx\thesis@city\@empty
+  \let\thesis@city\department@city
+  \fi
+}
+
+\AtBeginDocument{\selectDepartment\captionsenglish}

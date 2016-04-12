@@ -1,0 +1,136 @@
+module switch(
+	clk,
+	reset,
+	pattern_ready,
+	pattern_valid,
+	pattern_data,
+	in_ready,
+	in_valid,
+	out_ready,
+	out_valid,
+	out_t%1$s%2$s
+);
+
+input clk;
+input reset;
+output reg pattern_ready;
+input pattern_valid;
+input [7:0] pattern_data;
+output reg in_ready;
+input in_valid;
+input out_ready;
+output reg out_valid;
+output reg [%4$d:0] out_t;
+%5$s%6$s
+reg [%4$d:0] t;
+reg enable;
+reg current_pattern;
+%7$s
+reg [%4$d:0] t_0;
+%8$s
+%9$s%10$sreg [%4$d:0] obuf_t[0:6];
+reg [2:0] obuf_len;
+
+reg [%11$d:0] pipeline_fill;
+
+reg [%27$d:0] pattern_word;
+reg [%28$d:0] pattern_word_bytes;
+reg write_pattern_word;
+reg [%30$d:0] pattern_word_n;
+reg [%30$d:0] pattern_pos;
+
+always @(posedge clk or posedge reset)
+begin : control
+	integer i;
+	if(reset) begin
+		t <= 0;
+		t_0 <= 0;
+		obuf_len <= 0;
+		enable <= 0;
+		out_t <= 0;
+		out_valid <= 0;
+		in_ready <= 0;
+		pipeline_fill <= 0;
+		current_pattern <= 0;
+		pattern_ready <= 1;
+		pattern_word <= 0;
+		pattern_word_bytes <= 0;
+		write_pattern_word <= 0;
+		pattern_word_n <= 0;
+		pattern_pos <= 0;
+		for(i = 0; i < 6; i = i + 1) obuf_t[i] <= 0;
+%12$s	end
+	else begin
+		if(in_valid) begin
+			t_0 <= t;
+			t <= t + 1;
+			enable <= 1;
+%13$s		end
+		else begin
+			enable <= 0;
+		end
+
+		if(enable && pipeline_fill >= %14$d) begin
+			obuf_t[0] <= t_%15$d;
+%16$s			for(i = 1; i < 7; i = i + 1) obuf_t[i] <= obuf_t[i - 1];
+			if(!(out_ready && obuf_len > 0)) begin
+				obuf_len <= obuf_len + 1;
+			end
+		end
+		else if(enable) begin
+			pipeline_fill <= pipeline_fill + 1;
+		end
+
+		in_ready <= pipeline_fill < %14$d || obuf_len < 4;
+
+		if(out_ready && obuf_len > 0) begin
+%17$s			out_t <= obuf_t[obuf_len - 1];
+			out_valid <= 1;
+			if(!enable) obuf_len <= obuf_len - 1;
+		end
+		else begin
+			out_valid <= 0;
+		end
+
+		if(pattern_valid) begin
+			for(i = 0; i < 8; i = i + 1) begin
+				pattern_word[(%29$d - pattern_word_bytes) * 8
+					+ i] <= pattern_data[i];
+			end
+		end
+
+		if(pattern_valid && pattern_word_bytes == %29$d) begin
+			pattern_word_bytes <= 0;
+			write_pattern_word <= 1;
+			pattern_pos <= pattern_word_n;
+		end
+
+		else if(pattern_valid) begin
+			pattern_word_bytes <= pattern_word_bytes  + 1;
+		end
+
+		if(write_pattern_word) begin
+			for(i = 0; i < %22$d; i = i + 1) begin
+%20$s			end
+			write_pattern_word <= 0;
+		end
+
+		if(pattern_word_n == %31$d &&
+				pattern_word_bytes == %29$d &&
+				pattern_valid) begin
+			pattern_ready <= 0;
+			pattern_word_n <= 0;
+		end
+		else if(pattern_word_bytes == %29$d &&
+				pattern_valid) begin
+			pattern_word_n <= pattern_word_n + 1;
+		end
+
+		if(!pattern_ready && in_valid && t == %31$d) begin
+			current_pattern <= ~current_pattern;
+			pattern_ready <= 1;
+		end
+	end
+end
+
+endmodule

@@ -1,0 +1,15 @@
+reg [%6$d:0] node_%2$d_%3$d;
+reg [%6$d:0] node_%2$d_%4$d;
+always @(posedge clk) begin
+  if(valid_2) begin
+    if(pattern_used_%1$d ? yy_out[%5$d] : xx_out[%5$d]) begin
+      node_%2$d_%3$d <= node_%1$d_%4$d;
+      node_%2$d_%4$d <= node_%1$d_%3$d;
+    end
+    else begin
+      node_%2$d_%3$d <= node_%1$d_%3$d;
+      node_%2$d_%4$d <= node_%1$d_%4$d;
+    end
+  end
+end
+

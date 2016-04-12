@@ -1,0 +1,108 @@
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+#include <limits.h>
+#include <stdio.h>
+#include <string.h>
+
+#define INPUTS %1$d
+#define PERIOD %2$d
+
+static void write_bits(
+		unsigned char *dst,
+		unsigned dst_bit_offset,
+		unsigned value,
+		unsigned n_bits)
+{
+	unsigned i;
+	for(i = 0; i < n_bits; ++i) {
+		unsigned bit_offs = dst_bit_offset + i;
+		unsigned byte = bit_offs / 8;
+		unsigned bit = bit_offs %% 8;
+		if((value >> i) & 1) dst[byte] |= 1 << bit;
+		else dst[byte] &= ~(1 << bit);
+	}
+}
+
+static unsigned ulog2(unsigned n)
+{
+	unsigned i = 0;
+	while((1 << i) - 1 < n) ++i;
+	return i;
+}
+
+int generate_pattern_data(
+		unsigned char **data_out,
+		unsigned *data_sz_out,
+		unsigned *pattern,
+		unsigned pattern_len)
+{
+	int ret = -1;
+	if(pattern_len != INPUTS * PERIOD) goto e_args;
+
+	unsigned mem_sz;
+	unsigned n_mem;
+	if(PERIOD >= INPUTS) {
+		n_mem = INPUTS;
+		mem_sz = (PERIOD - 1) / INPUTS + 1;
+	}
+	else {
+		n_mem = PERIOD;
+		mem_sz = 1;
+	}
+	unsigned aword_bits = 1 + ulog2(INPUTS - 1);
+	unsigned bword_bits = ulog2(n_mem - 1) + ulog2(mem_sz - 1);
+	unsigned control_bits =
+		INPUTS * n_mem * aword_bits +
+		INPUTS * bword_bits;
+	unsigned bytes_in_word = (control_bits + 7) / 8;
+
+	unsigned long sz = bytes_in_word * PERIOD;
+	unsigned char *data = malloc(sz);
+	if(!data) goto e_malloc_data;
+	/* Will result in all enables being 0 because they will not be touched
+	 * if they're not to be used later. */
+	memset(data, 0, sz);
+
+	unsigned i, j;
+	unsigned written[INPUTS];
+	for(i = 0; i < INPUTS; ++i) written[i] = 0;
+	for(i = 0; i < PERIOD; ++i) {
+		unsigned char *word = data + i * bytes_in_word;
+		for(j = 0; j < INPUTS; ++j) {
+			unsigned output = pattern[i * INPUTS + j] %% INPUTS;
+			unsigned mem = written[output] %% n_mem;
+			/* Enable. */
+			write_bits(word,
+				aword_bits * (output * n_mem + mem),
+				1, 1);
+			unsigned address = written[output] / n_mem;
+			++written[output];
+			/* Input. */
+			write_bits(word,
+				aword_bits * (output * n_mem + mem) + 1,
+				j, ulog2(INPUTS - 1));
+			/* Output side. */
+			unsigned out_t = pattern[i * INPUTS + j] / INPUTS;
+			unsigned char *out_word = data + out_t * bytes_in_word;
+			unsigned skip = aword_bits * INPUTS * n_mem;
+			/* Which mem? */
+			write_bits(out_word,
+				skip + bword_bits * output,
+				mem, ulog2(n_mem - 1));
+			/* Address. */
+			write_bits(out_word,
+				skip + bword_bits * output + ulog2(n_mem - 1),
+				address, ulog2(mem_sz - 1));
+		}
+	}
+
+	*data_sz_out = sz;
+	*data_out = data;
+	ret = 0;
+
+e_input:
+	if(ret) free(data);
+e_malloc_data:
+e_args:
+	return ret;
+}

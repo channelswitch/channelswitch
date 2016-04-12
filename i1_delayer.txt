@@ -1,0 +1,11 @@
+		if(%1$s
+				&& t_%3$d[%5$d]) begin
+			address%2$d_%4$d <= address%3$d_%4$d;
+			value%2$d_%4$d <= value%3$d_%4$d;
+		end
+		else begin
+			address%2$d_%4$d <= memory%2$d_%4$d[t_%3$d & %6$d][%7$d:0];
+			value%2$d_%4$d <= memory%2$d_%4$d[t_%3$d & %6$d][%8$d:%9$d];
+			memory%2$d_%4$d[t_%3$d & %6$d][%7$d:0] <= address%3$d_%4$d;
+			memory%2$d_%4$d[t_%3$d & %6$d][%8$d:%9$d] <= value%3$d_%4$d;
+		end

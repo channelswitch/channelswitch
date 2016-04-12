@@ -1,0 +1,107 @@
+#include "generate_pattern_data.h"
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+static void write_bits(
+		unsigned char *dst,
+		unsigned dst_bit_offset,
+		unsigned value,
+		unsigned n_bits)
+{
+#if 0
+	dst += dst_bit_offset / 8;
+	dst_bit_offset %%= 8;
+	while(n_bits) {
+		unsigned msb1 = 8 - dst_bit_offset;
+		unsigned lsb = msb1 < n_bits ? 0 : msb1 - n_bits;
+		unsigned bits_writing = msb1 - lsb;
+		unsigned mask = ((1 << msb1) - 1) & ~((1 << lsb) - 1);
+		*dst &= ~mask;
+		*dst |= (value >> (n_bits - bits_writing) << lsb) & mask;
+		n_bits -= bits_writing;
+		++dst;
+		dst_bit_offset = 0;
+	}
+#else
+	unsigned i;
+	for(i = 0; i < n_bits; ++i) {
+		unsigned bit_offs = dst_bit_offset + i;
+		unsigned byte = bit_offs / 8;
+		unsigned bit = bit_offs %% 8;
+		if((value >> i) & 1) dst[byte] |= 1 << bit;
+		else dst[byte] &= ~(1 << bit);
+	}
+#endif
+}
+
+static void enable(unsigned char *data, unsigned input, unsigned mem,
+		unsigned t)
+{
+	write_bits(data, input * %8$d + mem * %9$d + t * %10$d, 1, 1);
+}
+
+static void which_input(unsigned char *data, unsigned input, unsigned mem,
+		unsigned t, unsigned which)
+{
+	write_bits(data, input * %8$d + mem * %9$d + t * %10$d + 1, which, %11$d);
+}
+
+static void which_memory(unsigned char *data, unsigned input, unsigned t,
+		unsigned which)
+{
+	write_bits(data, %12$d + input * %13$d + t * %14$d, which, %15$d);
+}
+
+static void read_address(unsigned char *data, unsigned input, unsigned t,
+		unsigned addr)
+{
+	write_bits(data, %12$d + input * %13$d + t * %14$d + %15$d, addr, %16$d);
+}
+
+int generate_pattern_data(
+		unsigned char **data_out,
+		unsigned *data_sz_out,
+		unsigned *pattern,
+		unsigned pattern_len)
+{
+	int err = -1;
+
+	if(pattern_len != %7$d) abort();
+
+	*data_sz_out = %1$d;
+	*data_out = malloc(*data_sz_out);
+	if(!*data_out) goto e_malloc;
+	memset(*data_out, 0, *data_sz_out);
+
+	unsigned written[%2$d];
+	memset(written, 0, sizeof written);
+
+	unsigned i, k;
+	for(k = 0; k < %4$d; ++k)
+	for(i = 0; i < %2$d; ++i) {
+		unsigned dst = pattern[i + k * %2$d];
+		unsigned dst_t = dst / %2$d;
+		unsigned dst_output = dst %% %2$d;
+		unsigned addr = written[dst_output] / %3$d;
+		unsigned mem = written[dst_output] %% %3$d;
+		++written[dst_output];
+		enable(*data_out, dst_output, mem, k);
+		which_input(*data_out, dst_output, mem, k, i);
+		which_memory(*data_out, dst_output, dst_t, mem);
+		read_address(*data_out, dst_output, dst_t, addr);
+	}
+
+	/* Reverse bytes to compensate for input shift register. */
+	for(i = 0; i < %1$d / 2; ++i){
+		unsigned char tmp = (*data_out)[i];
+		(*data_out)[i] = (*data_out)[%1$d - i - 1];
+		(*data_out)[%1$d - i - 1] = tmp;
+	}
+
+	err = 0;
+
+	if(err) free(*data_out);
+e_malloc:
+	return err;
+}

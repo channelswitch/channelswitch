@@ -1,0 +1,394 @@
+module switch(
+  clk,
+  reset,
+  pattern_ready,
+  pattern_valid,
+  pattern_data,
+  in_ready,
+  in_valid,
+  out_ready,
+  out_valid,
+  out_t%1$s
+);
+
+input clk;
+input reset;
+output reg pattern_ready;
+input pattern_valid;
+input [7:0] pattern_data;
+output reg in_ready;
+input in_valid;
+input out_ready;
+output reg out_valid;
+output reg [%12$d:0] out_t;
+%19$s
+reg [%10$d:0] outputs[0:%20$d];
+wire [%10$d:0] inputs[0:%20$d];
+%21$s
+
+/* There are three control words: c_initial, out_xx and out_yy. Each is set by
+ * its process to be the control data for every reconfigurable component in the
+ * switch, a bit for each 2x2 switch in the ingress and egress and an address
+ * to read from for each memory.
+ *
+ * c_initial gives the initial pattern, where inputs are mapped directly to
+ * outputs (required because RAMs can't be reset). out_xx and out_yy are
+ * user-programmed patterns.
+ *
+ * There are many clock cycles between input and output so when switching
+ * patterns, different stages will use different patterns. This is controlled
+ * by the pattern registers. ingress_pattern tells each of the %2$d stages in
+ * the ingress switch which pattern to use. The first bit of middle_pattern
+ * corresponds to the writing operation but is never used directly because
+ * writing is the same regardless of pattern. The second bit corresponds to the
+ * read operation. The last two bits are for the 2 cycle delay when reading from
+ * memories. egress_pattern is like ingress_pattern.
+ *
+ * For the patterns, a value of 0 means to use c_initial, 1 out_xx and 2
+ * out_yy.
+ *
+ * Format of the control word:
+ *  n_switches bits, each controlling one 2x2 switch in the ingress stage.
+ *  inputs words each adr_bits wide, containing a read address.
+ *  another n_switches bits for the output stage. */
+
+reg [1:0] ingress_pattern[0:%2$d];
+reg [1:0] middle_pattern[0:1];
+reg [1:0] egress_pattern[0:%2$d];
+
+reg [1:0] egress_pattern_1;
+
+/* Time at input */
+reg [%12$d:0] t;
+reg [%12$d:0] t_1;
+reg [%12$d:0] t_2;
+
+reg [%14$d:0] c_initial;
+
+/* Input pipeline for in_valid. */
+reg valid_1;
+reg valid_2;
+
+/* Same as pattern_t will be next cycle. */
+reg [%12$d:0] c_initial_counter;
+always @(posedge clk or posedge reset)
+begin : generate_initial_control_word
+  integer i;
+  if(reset) begin
+    c_initial <= 0;
+    c_initial_counter <= %5$d;
+  end
+  else begin
+    if(valid_1) begin
+      c_initial_counter <= c_initial_counter == %6$d ? 0 : c_initial_counter + 1;
+    end
+    c_initial <= 0;
+    /* Fuck you xflow this is fucking constant. */
+//    for(i = 0; i < %9$d; i = i + 1) begin
+//      c_initial[%26$d + (i + 1) * %27$d - 1:%26$d + i * %27$d] <= c_initial_counter;
+//    end
+%31$s  end
+end
+
+reg we_a;
+reg we_b;
+reg enable_data_memories;
+
+%17$sreg [%10$d:0] ingress[0:%18$d];
+reg [%10$d:0] egress[0:%18$d];
+
+/*
+ * State of the two patterns:
+ *  1 - Being used.
+ *  0 - Not being used, can be modified.
+ */ 
+reg xx_state;
+reg yy_state;
+
+/* 0 - writing to *_a and reading from *_b. 1 - the reverse. */
+reg mem_state;
+reg mem_state_1;
+reg mem_state_2;
+
+reg [%4$d:0] pattern_t;
+
+reg to_run_egress_in_1;
+reg to_run_egress;
+
+reg [%8$d:0] fill;
+
+/* Extra large obuf to be sure of handling the many pipelines. */
+reg [%10$d:0] obuf[0:%11$d];
+reg [3:0] obuf_len;
+
+reg [%32$d:0] pattern_word;
+reg [%16$d:0] pattern_byte_counter;
+reg pattern_word_complete;
+reg [%12$d:0] pattern_word_counter;
+reg pattern_pending;
+reg using_two_patterns_2;
+reg using_two_patterns_1;
+reg using_two_patterns;
+reg [1:0] next_pattern;
+
+/* These store the control word for the egress stage, which runs 2 cycles after
+ * the ingress stage. */
+reg [%14$d:0] c_initial_1;
+reg [%14$d:0] c_initial_2;
+reg [%14$d:0] out_xx_1;
+reg [%14$d:0] out_xx_2;
+reg [%14$d:0] out_yy_1;
+reg [%14$d:0] out_yy_2;
+
+wire [%10$d:0] mem_out[0:%20$d];
+%29$s
+/* We must also pipeline the data inputs 2 clock cycles so that we can read the
+ * control words before it goes into the switch. */
+reg [%10$d:0] inputs_1[0:%20$d];
+reg [%10$d:0] inputs_2[0:%20$d];
+
+always @(posedge clk or posedge reset)
+begin : main
+  integer i;
+  integer j;
+  if(reset) begin
+    t <= 0;
+    t_1 <= 0;
+    t_2 <= 0;
+    for(i = 0; i < %3$d; i = i + 1) ingress_pattern[i] <= 0;
+    for(i = 0; i < 2; i = i + 1) middle_pattern[i] <= 0;
+    for(i = 0; i < %3$d; i = i + 1) egress_pattern[i] <= 0;
+    egress_pattern_1 <= 0;
+    in_ready <= 1;
+    pattern_ready <= 1;
+    pattern_t <= %5$d;
+    to_run_egress <= 0;
+    fill <= 0;
+    xx_state <= 0;
+    yy_state <= 0;
+    pattern_byte_counter <= 0;
+    pattern_word_complete <= 0;
+    pattern_word_counter <= 0;
+    pattern_pending <= 0;
+    using_two_patterns_2 <= 0;
+    using_two_patterns_1 <= 0;
+    using_two_patterns <= 0;
+    we_a <= 0;
+    we_b <= 0;
+    enable_data_memories <= 0;
+    en_xx <= 0;
+    en_yy <= 0;
+    mem_state <= 0;
+    mem_state_1 <= 0;
+    mem_state_2 <= 0;
+    valid_1 <= 0;
+    valid_2 <= 0;
+    obuf_len <= 0;
+    out_t <= %6$d;
+  end
+  else begin
+    /* Memories not used unless specified. */
+    enable_data_memories <= 0;
+    we_a <= 0;
+    we_b <= 0;
+    en_xx <= 0;
+    en_yy <= 0;
+
+    /* Input pipeline */
+    valid_1 <= in_valid;
+    valid_2 <= valid_1;
+    for(i = 0; i <= %20$d; i = i + 1) inputs_1[i] <= inputs[i];
+    for(i = 0; i <= %20$d; i = i + 1) inputs_2[i] <= inputs_1[i];
+    if(in_valid) begin
+      t <= t == %13$d ? 0 : t + 1;
+    end
+    t_1 <= t;
+    t_2 <= t_1;
+
+    if(valid_2) begin
+      pattern_t <= pattern_t == %6$d ? 0 : pattern_t + 1;
+      for(i = 0; i < %2$d; i = i + 1) ingress_pattern[i + 1] <= ingress_pattern[i];
+      middle_pattern[0] <= ingress_pattern[%2$d];
+      if(pattern_t == %6$d) middle_pattern[1] <= middle_pattern[0];
+
+      /* Ingress stage AS-Benes switch. */
+`define to_swap(bit, x) ( \
+  ingress_pattern[x] == 0 ? c_initial[bit] : \
+  ingress_pattern[x] == 1 ? out_xx[bit] : \
+  ingress_pattern[x] == 2 ? out_yy[bit] : \
+  'bX)
+%23$s`undef to_swap
+
+      /* This is the middle stage (memories). We tell the memories to write and
+       * read here, but output data only appears on out_* in 2 cycles. */
+`define in_data(y) ingress[%22$d + y]
+`define write_addr pattern_t
+`define read_addr(y) ( \
+  middle_pattern[1] == 0 ? c_initial[%26$d + (y + 1) * %27$d - 1:%26$d + y * %27$d] : \
+  middle_pattern[1] == 1 ? out_xx[%26$d + (y + 1) * %27$d - 1:%26$d + y * %27$d] : \
+  middle_pattern[1] == 2 ? out_yy[%26$d + (y + 1) * %27$d - 1:%26$d + y * %27$d] : \
+  'bX)
+     enable_data_memories <= 1;
+     if(pattern_t == %6$d) mem_state <= ~mem_state;
+     if(mem_state == 0) begin
+        we_a <= 1;
+        we_b <= 0;
+%24$s     end
+     else begin
+        we_a <= 0;
+        we_b <= 1;
+%25$s     end
+`undef read_addr
+`undef write_addr
+`undef in_data
+    end
+
+    /* Pipeline for egress stage. */
+    c_initial_1 <= c_initial;
+    c_initial_2 <= c_initial_1;
+    out_xx_1 <= out_xx;
+    out_xx_2 <= out_xx_1;
+    out_yy_1 <= out_yy;
+    out_yy_2 <= out_yy_1;
+    mem_state_1 <= mem_state;
+    mem_state_2 <= mem_state_1;
+    to_run_egress_in_1 <= valid_2;
+    to_run_egress <= to_run_egress_in_1;
+    egress_pattern_1 <= middle_pattern[1];
+    egress_pattern[0] <= egress_pattern_1;
+
+    if(to_run_egress) begin
+      for(i = 0; i < %2$d; i = i + 1) egress_pattern[i + 1] <= egress_pattern[i];
+
+      /* Use control words from 2 cycles ago. */
+`define to_swap(bit, x) ( \
+  egress_pattern[x] == 0 ? c_initial_2[%30$d + bit] : \
+  egress_pattern[x] == 1 ? out_xx_2[%30$d + bit] : \
+  egress_pattern[x] == 2 ? out_yy_2[%30$d + bit] : \
+  'bX)
+%28$s`undef to_swap
+    end
+
+    /* Fill is used to make sure we don't output data before everything has
+     * gone all the way through the switch. */
+    if(to_run_egress) begin
+      if(fill != %7$d) fill <= fill + 1;
+    end
+
+    /* Writing to obuf. */
+    if(to_run_egress && fill == %7$d) begin
+      for(i = 0; i < %9$d; i = i + 1) begin
+        obuf[i] <= egress[%22$d + i];
+        for(j = 1; j < 15; j = j + 1) begin
+          obuf[j * %9$d + i] <= obuf[(j - 1) * %9$d + i];
+        end
+      end
+    end
+
+    /* Reading from obuf. */
+    if(out_ready && obuf_len > 0) begin
+      for(i = 0; i < %9$d; i = i + 1) begin
+        outputs[i] <= obuf[(obuf_len - 1) * %9$d + i];
+      end
+      out_t <= out_t == %6$d ? 0 : out_t + 1;
+      out_valid <= 1;
+    end
+    else begin
+      out_valid <= 0;
+    end
+
+    obuf_len <= obuf_len +
+      (to_run_egress && fill == %7$d) -
+      (out_ready && obuf_len > 0);
+    in_ready <= obuf_len < 3;
+
+    pattern_ready <= (xx_state == 0 || yy_state == 0) && !pattern_pending;
+
+    if(pattern_valid) begin
+      for(i = 0; i <= %32$d; i = i + 1) begin
+        pattern_word[i] <= i >= %33$d ? pattern_data[i - %33$d] : pattern_word[i + 8];
+      end
+      if(pattern_byte_counter == %15$d) begin
+        pattern_byte_counter <= 0;
+      end
+      else begin
+        pattern_byte_counter <= pattern_byte_counter + 1;
+      end
+    end
+
+    pattern_word_complete <= pattern_valid && pattern_byte_counter == %15$d;
+
+    if(pattern_word_complete && (xx_state == 0 || yy_state == 0)) begin
+      if(xx_state == 0) begin
+        en_xx <= 1;
+        we_xx <= 1;
+        addr_xx <= pattern_word_counter;
+        in_xx <= pattern_word[%14$d:0];
+      end
+      else if(yy_state == 0) begin
+        en_yy <= 1;
+        we_yy <= 1;
+        addr_yy <= pattern_word_counter;
+        in_yy <= pattern_word[%14$d:0];
+      end
+      if(pattern_word_counter == %13$d) begin
+        pattern_word_counter <= 0;
+        pattern_ready <= 0;
+        pattern_pending <= 1;
+      end
+      else begin
+        pattern_word_counter <= pattern_word_counter + 1;
+      end
+    end
+
+    if(pattern_pending && (in_valid && t == %13$d)) begin
+      if(xx_state == 0) begin
+        xx_state <= 1;
+        next_pattern <= 1;
+      end
+      else begin
+        yy_state <= 1;
+        next_pattern <= 2;
+      end
+      pattern_pending <= 0;
+      using_two_patterns_2 <= 1;
+    end
+
+    using_two_patterns_1 <= using_two_patterns_2;
+    using_two_patterns <= using_two_patterns_1;
+
+    if(using_two_patterns_1) begin
+      ingress_pattern[0] <= next_pattern;
+    end
+
+    if(using_two_patterns) begin
+      if(ingress_pattern[0] == 1 && egress_pattern[%2$d] == 1) begin
+        yy_state <= 0;
+        using_two_patterns <= 0;
+        using_two_patterns_1 <= 0;
+        using_two_patterns_2 <= 0;
+      end 
+      else if(ingress_pattern[0] == 2 && egress_pattern[%2$d] == 2) begin
+        xx_state <= 0;
+        using_two_patterns <= 0;
+        using_two_patterns_1 <= 0;
+        using_two_patterns_2 <= 0;
+      end
+    end
+
+    if(in_valid) begin
+      if(xx_state == 1) begin
+        en_xx <= 1;
+        we_xx <= 0;
+        addr_xx <= t;
+      end
+      if(yy_state == 1) begin
+        en_yy <= 1;
+        we_yy <= 0;
+        addr_yy <= t;
+      end
+    end
+  end
+end
+
+endmodule

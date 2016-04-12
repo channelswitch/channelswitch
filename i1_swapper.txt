@@ -1,0 +1,12 @@
+		if(%1$s) begin
+			address%2$d_%4$d <= address%3$d_%5$d;
+			address%2$d_%5$d <= address%3$d_%4$d;
+			value%2$d_%4$d <= value%3$d_%5$d;
+			value%2$d_%5$d <= value%3$d_%4$d;
+		end
+		else begin
+			address%2$d_%4$d <= address%3$d_%4$d;
+			address%2$d_%5$d <= address%3$d_%5$d;
+			value%2$d_%4$d <= value%3$d_%4$d;
+			value%2$d_%5$d <= value%3$d_%5$d;
+		end

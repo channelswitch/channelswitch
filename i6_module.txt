@@ -1,0 +1,252 @@
+module switch(
+  clk,
+  reset,
+  pattern_ready,
+  pattern_valid,
+  pattern_data,
+  in_ready,
+  in_valid,
+  out_ready,
+  out_valid,
+  out_t%1$s
+);
+
+input clk;
+input reset;
+output reg pattern_ready;
+input pattern_valid;
+input [7:0] pattern_data;
+output reg in_ready;
+input in_valid;
+input out_ready;
+output reg out_valid;
+wire [%5$d:0] inputs[0:%19$d];
+reg [%5$d:0] inputs_1[0:%19$d];
+reg [%5$d:0] outputs[0:%19$d];
+%2$s
+output reg [%7$d:0] out_t;
+reg valid_1;
+reg valid_2;
+reg [%7$d:0] t;
+reg [%7$d:0] t_1;
+reg [%7$d:0] t_2;
+always @(posedge clk or posedge reset) begin : inputs_pipeline
+  integer i;
+  if(reset) begin
+    valid_1 <= 0;
+    valid_2 <= 0;
+    t <= 0;
+    t_1 <= 0;
+    t_2 <= 0;
+  end
+  else begin
+    valid_1 <= in_valid;
+    valid_2 <= valid_1;
+    for(i = 0; i < %6$d; i = i + 1) inputs_1[i] <= inputs[i];
+    t_1 <= t;
+    t_2 <= t_1;
+    if(in_valid) t <= t == %4$d ? 0 : t + 1;
+  end
+end
+
+reg [%3$d:0] xx_out;
+reg [%3$d:0] xx[0:%4$d];
+reg xx_en;
+reg xx_we;
+reg [%7$d:0] xx_addr;
+reg [%3$d:0] xx_in;
+always @(posedge clk) begin
+  if(xx_en) begin
+    if(xx_we) xx[xx_addr] <= xx_in;
+    else xx_out <= xx[xx_addr];
+  end
+end
+
+reg [%3$d:0] yy_out;
+reg [%3$d:0] yy[0:%4$d];
+reg yy_en;
+reg yy_we;
+reg [%7$d:0] yy_addr;
+reg [%3$d:0] yy_in;
+always @(posedge clk) begin
+  if(yy_en) begin
+    if(yy_we) yy[yy_addr] <= yy_in;
+    else yy_out <= yy[yy_addr];
+  end
+end
+
+/* Pattern control */
+reg xx_state;
+reg yy_state;
+reg [%10$d:0] pattern_word;
+reg [%9$d:0] pattern_byte_counter;
+reg pattern_word_complete;
+reg [%11$d:0] pattern_word_counter;
+reg pattern_complete;
+reg pattern_pending_2;
+reg pattern_pending;
+reg next_pattern;
+reg using_two_patterns;
+reg nonempty_0;
+reg pattern_used_0;
+reg [%7$d:0] addr_0;
+wire pattern_used_last;
+%17$salways @(posedge clk or posedge reset) begin : pattern_control
+  integer i;
+  if(reset) begin
+    xx_state <= 0;
+    yy_state <= 0;
+    pattern_byte_counter <= 0;
+    pattern_word_complete <= 0;
+    pattern_word_counter <= 0;
+    pattern_complete <= 0;
+    pattern_ready <= 1;
+    pattern_pending_2 <= 0;
+    pattern_pending <= 0;
+    using_two_patterns <= 0;
+    nonempty_0 <= 0;
+    pattern_used_0 <= 1;
+    addr_0 <= 0;
+  end 
+  else begin
+    if(valid_1) begin
+      nonempty_0 <= 1;
+      addr_0 <= t_1;
+%18$s    end
+
+    xx_en <= 0;
+    yy_en <= 0;
+
+    if((xx_state == 0 || yy_state == 0) && pattern_valid) begin
+      /* Shift in pattern_data from the high bits. This way, bit n in the
+       * data stream will also be bit n in the control memory. */
+      for(i = 0; i <= %10$d; i = i + 1) begin
+        if(i + 8 > %10$d) pattern_word[i] <= pattern_data[(i + 8) - %10$d - 1];
+        else pattern_word[i] <= pattern_word[i + 8];
+      end
+      pattern_byte_counter <= pattern_byte_counter == %12$d ? 0 :
+        pattern_byte_counter + 1;
+    end
+
+    if(xx_state == 1) begin
+      if(in_valid) begin
+        xx_en <= 1;
+        xx_we <= 0;
+        xx_addr <= t;
+      end
+    end
+    else begin
+      if(pattern_word_complete) begin
+        xx_en <= 1;
+        xx_we <= 1;
+        xx_addr <= pattern_word_counter;
+        xx_in <= pattern_word[%3$d:0];
+      end
+    end
+    if(yy_state == 1) begin
+      if(in_valid) begin
+        yy_en <= 1;
+        yy_we <= 0;
+        yy_addr <= t;
+      end
+    end
+    else if(xx_state == 1) begin
+      if(pattern_word_complete) begin
+        yy_en <= 1;
+        yy_we <= 1;
+        yy_addr <= pattern_word_counter;
+        yy_in <= pattern_word[%3$d:0];
+      end
+    end
+
+    if(pattern_word_complete) pattern_word_counter <=
+      pattern_word_counter == %4$d ? 0 : pattern_word_counter + 1;
+    pattern_word_complete <= pattern_valid && pattern_byte_counter == %12$d;
+    pattern_complete <= pattern_word_complete && pattern_word_counter == %4$d;
+    pattern_ready <= (xx_state == 0 || yy_state == 0)
+      && !pattern_pending_2
+      && !pattern_pending
+      && !using_two_patterns;
+
+    if(pattern_complete) begin
+      if(xx_state == 0) begin
+        next_pattern <= 0; 
+        xx_state <= 1;
+      end
+      else begin
+        next_pattern <= 1;
+        yy_state <= 1;
+      end
+      pattern_pending_2 <= 1;
+    end
+
+    if(pattern_pending_2) begin
+      pattern_pending <= 1;
+      pattern_pending_2 <= 0;
+    end
+
+    if(pattern_pending && t_1 == 0) begin
+      pattern_pending <= 0;
+      using_two_patterns <= 1;
+      pattern_used_0 <= next_pattern;
+    end
+
+    if(using_two_patterns
+        && pattern_used_0 == pattern_used_last
+        && valid_2) begin
+      if(next_pattern == 0) yy_state <= 0;
+      else xx_state <= 0;
+      using_two_patterns <= 0;
+    end
+  end
+end
+
+/*
+ * Start of sorter
+ */
+
+%8$s/*
+ * End of sorter
+ */
+
+assign pattern_used_last = pattern_used_%16$d;
+
+reg [%5$d:0] obuf[0:%14$d];
+reg [3:0] obuf_len;
+always @(posedge clk or posedge reset) begin : obuf_control
+  integer i;
+  integer j;
+  if(reset) begin
+    obuf_len <= 0;
+    in_ready <= 0;
+    out_t <= %4$d;
+  end
+  else begin
+    /* Writing obuf. */
+    if(valid_2 && nonempty_%16$d) begin
+%15$s      for(i = 0; i < %6$d; i = i + 1) begin
+        for(j = 1; j < 7; j = j + 1) begin
+          obuf[j * %6$d + i] <= obuf[(j - 1) * %6$d + i];
+        end
+      end
+    end
+    /* Reading obuf. */
+    if(out_ready && obuf_len > 0) begin
+      for(i = 0; i < %6$d; i = i + 1) begin
+        outputs[i] <= obuf[(obuf_len - 1) * %6$d + i];
+      end
+      out_t <= out_t == %4$d ? 0 : out_t + 1;
+      out_valid <= 1;
+    end
+    else begin
+      out_valid <= 0;
+    end
+
+    obuf_len <= obuf_len +
+      (valid_2 && nonempty_%16$d) -
+      (out_ready && obuf_len > 0);
+    in_ready <= (xx_state == 1 || yy_state == 1) && obuf_len < 3;
+  end
+end
+
+endmodule

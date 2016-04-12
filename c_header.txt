@@ -1,0 +1,47 @@
+/*
+ * generate_pattern_data - Code to generate data to set the permutation of a
+ * switch.
+ *
+ * This code is automatically generated along with the Verilog describing the
+ * switch. It is used to generate the data necessary to make that hardware
+ * perform a particular permutation. The number of channels is the number of
+ * inputs times the period, both of which are specified by the user in the
+ * configuration file used to generate this code.
+ *
+ * The hardware has input ports named pattern_data and pattern_valid. Data
+ * shall be written one byte at a time to pattern_data. At the same time,
+ * pattern_valid shall be set to one. When all of the data has been written,
+ * the switch will use the new pattern after an unspecified amount of time.
+ * If data has begun to be written then all of it must be written before a new
+ * pattern is written. Channels that are routed the same in both the old and new
+ * permutations will not be affected.
+ *
+ * The function generate_pattern_data() generates the pattern data. Its output
+ * is an array of bytes allocated with malloc(), saved in data_out, and its
+ * length (in bytes), written to data_sz_out. The array returned in data_out is
+ * allocated with malloc and shall be freed by the user.
+ *
+ * -1 is returned in the event of an error. In this case, data_out and
+ * data_sz_out will not be written and the user shall not attempt to free
+ * data_out.
+ * 
+ * An error will be generated if malloc returns NULL.
+ *
+ * An error may be generated if the input is malformed, which it can be if it
+ * routes multiple input channels to the same output channel, or an output
+ * channel that does not exist. This may also not generate an error, in which
+ * case the data will cause the switch to generate invalid output.
+ *
+ * If you do not pass invalid patterns then you can assume that an error will
+ * only occur in out of memory circumstances.
+ *
+ * The input parameter pattern is the permutation to be used. It is an array
+ * where the index is the input channel and the value is the output channel for
+ * it to be routed to. For example: pattern[11] = 9 will route input channel 11
+ * to output channel 9.
+ */
+int generate_pattern_data(
+	unsigned char **data_out,
+	unsigned *data_sz_out,
+	unsigned *pattern,
+	unsigned pattern_len);

@@ -1,0 +1,219 @@
+module switch(
+  clk,
+  reset,
+  pattern_ready,
+  pattern_valid,
+  pattern_data,
+  in_ready,
+  in_valid,
+  out_ready,
+  out_valid,
+  out_t%1$s
+);
+
+input clk;
+input reset;
+output reg pattern_ready;
+input pattern_valid;
+input [7:0] pattern_data;
+output reg in_ready;
+input in_valid;
+input out_ready;
+output reg out_valid;
+output reg [%2$d:0] out_t;
+%3$s
+wire [%5$d:0] inputs[0:%8$d - 1];
+reg [%5$d:0] outputs[0:%8$d - 1];
+%4$s
+reg [%5$d:0] ingress[0:%8$d * %7$d - 1];
+reg [%5$d:0] egress[0:%8$d * %7$d - 1];
+
+%25$s
+reg [%2$d:0] in_t;
+
+reg [%5$d:0] obuf[0:7 * %8$d - 1];
+reg [2:0] obuf_len;
+
+/* Patterns */
+reg xx[0:%21$d - 1];
+reg yy[0:%21$d - 1];
+
+reg [%32$d:0] active;
+/* 0 = write to a, read from b. 1 = opposite. */
+reg middle_bank;
+reg [%15$d:0] memory_counter;
+
+reg [%32$d:0] pattern_at;
+reg updating_pattern;
+
+reg [%20$d:0] pattern_write_counter;
+reg pattern_pending;
+
+%30$s
+function [%2$d:0] read_addr;
+input integer y;
+input bank;
+begin : raddr_f
+  integer i;
+  integer bit;
+  for(i = 0; i < %18$d; i = i + 1) begin
+    bit = %9$d * %10$d + y * %10$d * %18$d + (%10$d - 1) * %18$d + i;
+    if(bank) begin
+      read_addr[i] = yy[bit];
+    end
+    else begin
+      read_addr[i] = xx[bit];
+    end
+  end
+end
+endfunction
+
+`define to_swap(bit, pos) (pattern_at[pos] ? yy[bit] : xx[bit])
+
+/* Because of the way that the memories work (2 cycle delay for reading), the
+ * egress stage runs 2 cycles after the ingress stage. The following registers
+ * are for pipelining between them. */
+reg run_egress;
+reg run_egress_1;
+reg read_memory;
+reg read_memory_1;
+reg pattern_pipeline;
+
+wire [%5$d:0] inputs3[0:%8$d - 1];
+%36$s
+%37$salways @(posedge clk or posedge reset)
+begin : main
+  integer i;
+  integer j;
+  if(reset) begin
+    pattern_pipeline <= 0;
+    run_egress <= 0;
+    run_egress_1 <= 0;
+    in_ready <= 1;
+    in_t <= 0;
+    out_t <= %10$d - 1;
+    out_valid <= 0;
+    pattern_ready <= 1;
+    for(i = 0; i <= %32$d; i = i + 1) pattern_at[i] <= 0;
+    updating_pattern <= 0;
+    pattern_write_counter <= 0;
+    pattern_pending <= 0;
+    active[0] <= 1;
+    for(i = 1; i <= %32$d; i = i + 1) active[i] <= 0;
+%34$s    middle_bank <= 0;
+    memory_counter <= 0;
+    obuf_len <= 0;
+    for(i = 0; i < %8$d; i = i + 1) outputs[i] <= 0;
+    for(i = 0; i < %8$d * %7$d; i = i + 1) begin
+      ingress[i] <= 0;
+      egress[i] <= 0;
+    end
+  end
+  else begin
+    if(in_valid) begin
+      /* Ingress stage (AS-Benes switch). */
+%22$s
+      /* Middle stage (memories). */
+      if(active[%7$d]) begin
+        /* Write memory */
+%26$s      end
+      if(active[%7$d + 1] || active[%7$d] && memory_counter == %10$d - 1) begin : ra
+        /* Get read address for next clock cycle where in_valid = 1. */
+        reg rpattern_1;
+        rpattern_1 = memory_counter == %10$d - 1 ?
+          pattern_at[%7$d] :
+          pattern_at[%7$d + 1];
+%31$s      end
+      if(active[%7$d + 1]) begin
+        /* Read memory */
+        read_memory_1 <= middle_bank;
+%27$s      end
+      if(active[%7$d]) begin
+        if(memory_counter == %10$d - 1) begin
+          memory_counter <= 0;
+          middle_bank <= ~middle_bank;
+        end
+        else begin
+          memory_counter <= memory_counter + 1;
+        end
+      end
+
+      /* Update active */
+      for(i = 0; i < %7$d; i = i + 1) active[i + 1] <= active[i];
+      if(memory_counter == %10$d - 1) active[%7$d + 1] <= 1;
+
+      /* Update pattern_at */
+      for(i = 0; i < %7$d; i = i + 1) pattern_at[i + 1] <= pattern_at[i];
+      if(memory_counter == %10$d - 1) pattern_at[%7$d + 1] <= pattern_at[%7$d];
+
+      /* Update fill */
+      if(in_t == %10$d - 1) in_t <= 0;
+      else in_t <= in_t + 1;
+    end
+
+    /* Middle/Egress pipelining */
+    run_egress <= run_egress_1;
+    read_memory <= read_memory_1;
+    run_egress_1 <= in_valid && active[%7$d + 1];
+    if(run_egress_1) active[%7$d + 2] <= 1;
+    pattern_pipeline <= pattern_at[%7$d + 1];
+    pattern_at[%7$d + 2] <= pattern_pipeline;
+
+    if(run_egress) begin
+      /* Egress stage (AS-Benes switch). */
+%24$s
+      /* Update active */
+      for(i = %7$d + 2; i < 2 * %7$d + 2; i = i + 1) active[i + 1] <= active[i];
+
+      /* Update pattern_at */
+      for(i = %7$d + 2; i < 2 * %7$d + 2; i = i + 1)
+        pattern_at[i + 1] <= pattern_at[i];
+    end
+
+    if(pattern_at[2 * %7$d + 2] == pattern_at[0]) updating_pattern <= 0;
+    if(!in_valid) begin
+      /* Memories are enabled only when in_valid. */
+%33$s    end
+
+    if(run_egress && active[2 * %7$d + 2]) begin
+      for(i = 0; i < %8$d; i = i + 1) begin
+        obuf[i] <= egress[(%7$d - 1) * %8$d + i];
+        for(j = 1; j < 7; j = j + 1) begin
+          obuf[j * %8$d + i] <= obuf[(j - 1) * %8$d + i];
+        end
+      end
+    end
+    if(out_ready && obuf_len > 0) begin
+      for(i = 0; i < %8$d; i = i + 1) begin
+        outputs[i] <= obuf[(obuf_len - 1) * %8$d + i];
+      end
+      if(out_t == %10$d - 1) out_t <= 0;
+      else out_t <= out_t + 1;
+      out_valid <= 1;
+    end
+    else out_valid <= 0;
+    obuf_len <= obuf_len +
+      (run_egress && active[2 * %7$d + 2]) -
+      (out_ready && obuf_len > 0);
+    in_ready <= obuf_len < 3;
+
+    if(pattern_valid && !updating_pattern) begin
+      if(pattern_write_counter == %19$d) begin
+        pattern_pending <= 1;
+        pattern_write_counter <= 0;
+      end
+      else begin
+        pattern_write_counter <= pattern_write_counter + 1;
+      end
+    end
+    pattern_ready <= !pattern_pending && !updating_pattern;
+
+    if(in_valid && pattern_pending && in_t == %10$d - 1) begin
+      pattern_pending <= 0;
+      updating_pattern <= 1;
+      pattern_at[0] <= ~pattern_at[0];
+    end
+  end
+end
+
+endmodule
