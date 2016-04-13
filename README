@@ -1,0 +1,7 @@
+channelswitch
+
+This is a C program generating Verilog for an arbitrarily reconfigurable
+switch/interleaver based on a reconfigurably nonblocking Clos network (other
+alternatives exist but are not recommended). The number of parallel inputs and
+the period in which to reorder things are parameters, as well as the datatype
+of samples in bits. Compile it and run with --help for more info.
