@@ -36,9 +36,6 @@ printf "\n" >&3
 printf "default:\n" >&3
 printf "\t$SRC/configure  CC='${CC}' LD='${LD}' CFLAGS='${CFLAGS}'\n" >&3
 printf "\t\${MAKE} -f Makefile.real default\n" >&3
-printf "pdf:\n" >&3
-printf "\t$SRC/configure  CC='${CC}' LD='${LD}' CFLAGS='${CFLAGS}'\n" >&3
-printf "\t\${MAKE} -f Makefile.real pdf\n" >&3
 printf "\n" >&3
 exec 3>&-
 
@@ -120,34 +117,7 @@ includetext c6_source
 
 rule generate "$OBJECTS" "\t$CC $CFLAGS -o generate $OBJECTS\n"
 
-fig() {
-	rule $1.eps $SRC/$1.fig "\tfig2dev -L eps $SRC/$1.fig $1.eps\n"
-}
-
-fig bitonic
-fig sorting_network
-fig sorting_network_2
-fig clos
-fig benes
-fig asbenes
-
-printf "TEXINPUTS:=$SRC/rtthesis:\$(TEXINPUTS)\nexport TEXINPUTS\n\n" >&3
-
-pdf() {
-	rule $1.pdf "$SRC/$1.tex $2" "\tcp $SRC/$1.tex ./\n\tpdflatex $1\n\tbibtex $1\n\tpdflatex $SRC/$1\n"
-}
-
-pdf_bib() {
-	rule $1.pdf "$SRC/$1.tex $2 $SRC/$3.bib" "\tcp $SRC/$1.tex ./\n\tcp $SRC/$3.bib ./\n\tpdflatex -interaction=batchmode $1\n\tpdflatex -interaction=batchmode $SRC/$1\n\tpdflatex -interaction=batchmode $SRC/$1\n"
-}
-
-rule "all_csv_files" "$SRC/results.csv $SRC/generate_plots.sh" "\t$SRC/generate_plots.sh $SRC/results.csv\n"
-
-pdf planning bitonic.eps
-pdf_bib report "sorting_network_2.eps bitonic.eps clos.eps benes.eps asbenes.eps all_csv_files" "bib"
-
-printf "pdf: planning.pdf report.pdf\n\n" >&3
-printf "all: generate pdf\n\n" >&3
+printf "all: generate\n\n" >&3
 printf "default: generate\n\n" >&3
 
 exec 3>&-
