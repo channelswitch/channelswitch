@@ -1,7 +1,14 @@
 channelswitch
 
 This is a C program generating Verilog for an arbitrarily reconfigurable
-switch/interleaver based on a reconfigurably nonblocking Clos network (other
+switch/interleaver based on a rearrangingly nonblocking Clos network (other
 alternatives exist but are not recommended). The number of parallel inputs and
 the period in which to reorder things are parameters, as well as the datatype
 of samples in bits. Compile it and run with --help for more info.
+
+If you use this for anything interesting please email me at rolst191@gmail.com.
+
+The archive report.zip contains Latex source for the report and the file
+route.ipe is an IPE file with a slideshow showing how Clos network rearranging
+works. You would have to figure out how to build the report yourself because
+some stuff is missing.
